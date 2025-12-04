@@ -1,483 +1,346 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="de">
 <head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Glukose-Auswertung – final (offline)</title>
+<meta charset="UTF-8">
+<title>Blutzucker Diagramme</title>
+
 <style>
-  :root{
-    --bg:#0b0b0d; --fg:#eee;
-    --card-bg:#fff; --card-fg:#000;
-    --accent1:#9fb8ff; /* Frühstück pastel */
-    --accent2:#b6f0d6; /* Mittag pastel */
-    --accent3:#ffd69a; /* Abend pastel */
-    --accent4:#ffb3b3; /* Schlaf pastel */
-    --accentZ:#c9b3ff; /* Zwischen lila pastel */
-  }
-  html,body{height:100%;margin:0;padding:14px;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial}
-  body{background:var(--bg);color:var(--fg)}
-  h1{margin:0 0 8px 0;font-size:18px}
-  textarea{width:100%;height:220px;padding:10px;box-sizing:border-box;border-radius:8px;border:1px solid #333;background:#0f1113;color:var(--fg);font-size:13px}
-  .controls{margin:10px 0;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-  .controls input{padding:6px;border-radius:6px;border:1px solid #333;background:#111;color:var(--fg)}
-  button{padding:9px 12px;border-radius:8px;border:1px solid #333;background:#222;color:var(--fg);cursor:pointer}
-  .note{color:#aaa;font-size:13px;margin-top:6px}
-  #canvasContainer{margin-top:16px}
-  .monthPage{background:var(--card-bg);color:var(--card-fg);padding:12px;border-radius:10px;max-width:794px;margin-bottom:18px;box-shadow:0 8px 20px rgba(0,0,0,0.35)}
-  .monthHeader{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
-  .monthTitle{font-weight:700;font-size:18px}
-  .legend{display:flex;gap:12px;flex-wrap:wrap;align-items:center;font-size:13px}
-  .legendItem{display:flex;gap:6px;align-items:center}
-  .legendColor{width:14px;height:10px;border-radius:3px;display:inline-block}
-  .weekCanvas{display:block;margin:8px 0;border-radius:6px;border:1px solid #ddd}
-  .metaSmall{font-size:12px;color:#444}
-  @media (max-width:720px){
-    .monthPage{padding:10px}
-    textarea{height:200px}
-  }
+    body {
+        background: #222;
+        color: #fff;
+        font-family: Arial, sans-serif;
+        margin: 0;
+        padding: 20px;
+    }
+
+    h1, h2, h3, .legend {
+        -webkit-text-stroke: 0.5px white; /* dünnere weiße Kontur */
+    }
+
+    .month-page {
+        page-break-after: always;
+        padding-bottom: 40px;
+    }
+
+    .week-block {
+        margin-bottom: 40px;
+        padding: 15px;
+        border: 1px solid #666;
+        border-radius: 8px;
+    }
+
+    .week-title {
+        font-size: 20px;
+        margin-bottom: 10px;
+        -webkit-text-stroke: 0.4px white;
+    }
+
+    .chart-container {
+        height: 280px; /* höheres Diagramm */
+        margin-bottom: 30px;
+    }
+
+    .legend {
+        font-size: 16px;
+        margin-bottom: 10px;
+    }
+
+    .download-btn {
+        background: #4caf50;
+        color: white;
+        padding: 10px 16px;
+        border-radius: 8px;
+        display: inline-block;
+        cursor: pointer;
+        margin: 10px 0;
+    }
 </style>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
 </head>
 <body>
-  <h1>Glukose-Auswertung — Monatsseiten with Wochen (offline)</h1>
-  <div class="note">Datumformat: <strong>TT.MM.JJJJ</strong>. Zwischenmessungen erkannt (z.B. "Zwischenmessung 167").</div>
 
-  <textarea id="txt" placeholder="Hier Mess-Text einfügen (Datum als TT.MM.JJJJ)."></textarea>
+<h1>Blutzucker Diagramm – Automatische Monatsansicht</h1>
+<div class="download-btn" onclick="exportPDF()">📄 PDF Exportieren</div>
 
-  <div class="controls">
-    <label>Breite/Tag (px): <input id="dayWidth" type="number" value="110" style="width:80px"></label>
-    <label>Max Wochen / Seite (Anzeigen): <input id="maxWeeks" type="number" value="6" style="width:60px"></label>
-    <button id="btnGen">Diagramm erstellen</button>
-    <button id="btnPDF">PDF exportieren</button>
-    <button id="btnClear">Leeren</button>
-  </div>
-
-  <div id="canvasContainer"></div>
+<div id="content"></div>
 
 <script>
-/* ---------------------- Utilities ---------------------- */
-// weiße Outline + Fill Text for readability (stroke then fill)
-function strokedText(ctx, text, x, y, font='14px Arial', fill='#000', stroke='#fff', lw=6, align='center') {
-  ctx.font = font; ctx.textAlign = align;
-  ctx.lineWidth = lw; ctx.strokeStyle = stroke; ctx.strokeText(text, x, y);
-  ctx.fillStyle = fill; ctx.fillText(text, x, y);
-}
+/* -----------------------------
+   BENUTZERDATEN HIER EINFÜGEN
+   ----------------------------- */
+const rawText = `
+20.10.2025 Frühstück 117
+20.10.2025 Mittagessen 139
+20.10.2025 Abendessen 93
+20.10.2025 Schlafen 122
 
-// round rect utility
-CanvasRenderingContext2D.prototype.roundRect = function (x, y, w, h, r) {
-  const ctx = this;
-  if (w < 2 * r) r = w / 2;
-  if (h < 2 * r) r = h / 2;
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.arcTo(x + w, y, x + w, y + h, r);
-  ctx.arcTo(x + w, y + h, x, y + h, r);
-  ctx.arcTo(x, y + h, x, y, r);
-  ctx.arcTo(x, y, x + w, y, r);
-  ctx.closePath();
-  return this;
-};
+21.10.2025 Frühstück 109
+21.10.2025 Mittagessen 109
+21.10.2025 Abendessen 106
+21.10.2025 Schlafen 116
 
-// parse dd.mm.yyyy -> Date
-function parseDateDMY(s) {
-  const p = s.split('.');
-  if (p.length < 3) return null;
-  return new Date(parseInt(p[2],10), parseInt(p[1],10)-1, parseInt(p[0],10));
-}
+22.10.2025 Frühstück 118
+22.10.2025 Mittagessen 94
+22.10.2025 Abendessen 115
+22.10.2025 Schlafen 100
 
-// ISO week helper (Mon start)
-function getISOWeekInfo(date) {
-  const tmp = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-  tmp.setUTCDate(tmp.getUTCDate() + 4 - (tmp.getUTCDay()||7));
-  const yearStart = new Date(Date.UTC(tmp.getUTCFullYear(),0,1));
-  const weekNo = Math.ceil((((tmp - yearStart) / 86400000) + 1)/7);
-  return { week: weekNo, year: tmp.getUTCFullYear() };
-}
+23.10.2025 Frühstück 114
+23.10.2025 Mittagessen 97
+23.10.2025 Abendessen 118
+23.10.2025 Schlafen 130
 
-/* ---------------------- Parser ---------------------- */
-function parseTextToDays(text) {
-  const lines = text.split(/\r?\n/).map(l=>l.trim());
-  const dateRe = /^\d{1,2}\.\d{1,2}\.\d{4}$/;
-  const days = [];
-  let cur = null;
-  for (let line of lines) {
-    if (!line) continue;
-    if (dateRe.test(line)) {
-      if (cur) days.push(cur);
-      const d = parseDateDMY(line);
-      if (!d) continue;
-      cur = { dateObj: d, dateStr: line, label: line.slice(0,5), F:null, M:null, A:null, S:null, Z:[] };
-      continue;
+24.10.2025 Frühstück 115
+24.10.2025 Zwischen 167
+24.10.2025 Zwischen 103
+24.10.2025 Mittagessen 124
+24.10.2025 Abendessen 92
+24.10.2025 Schlafen 183
+
+25.10.2025 Frühstück 97
+25.10.2025 Mittagessen 86
+25.10.2025 Abendessen 158
+25.10.2025 Schlafen 145
+
+26.10.2025 Frühstück 102
+26.10.2025 Mittagessen 94
+26.10.2025 Abendessen 124
+26.10.2025 Schlafen 160
+
+27.10.2025 Frühstück 136
+27.10.2025 Mittagessen 84
+27.10.2025 Abendessen 104
+27.10.2025 Schlafen 97
+
+28.10.2025 Frühstück 113
+28.10.2025 Mittagessen 84
+28.10.2025 Abendessen 114
+28.10.2025 Schlafen 115
+
+29.10.2025 Frühstück 109
+29.10.2025 Mittagessen 100
+29.10.2025 Abendessen 113
+29.10.2025 Schlafen 87
+`;
+
+/* ------------------------------------------------------------
+   PARSER – extrahiert Datum → Werte (Früh, Mittag, Abend, Schlaf)
+------------------------------------------------------------ */
+
+function parseData(text) {
+    const lines = text.trim().split("\n");
+    const data = {};
+
+    for (let ln of lines) {
+        ln = ln.trim();
+        if (!ln) continue;
+
+        const parts = ln.split(" ");
+        const date = parts[0];
+
+        if (!data[date]) data[date] = { Früh: null, Mittag: null, Abend: null, Schlaf: null, Zwischen: [] };
+
+        const type = parts[1].toLowerCase();
+        const value = parseInt(parts[2]);
+
+        if (type.startsWith("früh")) data[date].Früh = value;
+        else if (type.startsWith("mittag")) data[date].Mittag = value;
+        else if (type.startsWith("abend")) data[date].Abend = value;
+        else if (type.startsWith("schlaf")) data[date].Schlaf = value;
+        else if (type.startsWith("zwischen")) data[date].Zwischen.push(value);
     }
-    if (!cur) continue;
-    const low = line.toLowerCase();
-    const valMatch = line.match(/(\d{2,3})(?!.*\d)/);
-    const v = valMatch ? parseInt(valMatch[1],10) : null;
-    if (low.startsWith('früh') || low.startsWith('frueh')) cur.F = v;
-    else if (low.startsWith('mittag')) cur.M = v;
-    else if (low.startsWith('abend')) cur.A = v;
-    else if (low.startsWith('schlaf')) cur.S = v;
-    else if (low.includes('zwischen') || low.includes('messung')) {
-      if (v != null) cur.Z.push(v);
+
+    return data;
+}
+
+/* ---------------------------------------------------------
+   MONATS & WOCHEN LOGIK
+--------------------------------------------------------- */
+
+function groupByMonth(data) {
+    const months = {};
+
+    for (const date in data) {
+        const [d, m, y] = date.split(".");
+        const key = `${m}.${y}`; 
+
+        if (!months[key]) months[key] = {};
+        months[key][date] = data[date];
     }
-  }
-  if (cur) days.push(cur);
-  // filter days without any measurements
-  return days.filter(d=>d.F!=null || d.M!=null || d.A!=null || d.S!=null || (d.Z && d.Z.length>0));
+
+    return months;
 }
 
-/* ---------------------- Grouping ---------------------- */
-function groupByMonth(days) {
-  const map = {};
-  days.forEach(d => {
-    const y = d.dateObj.getFullYear();
-    const m = String(d.dateObj.getMonth()+1).padStart(2,'0');
-    const key = `${y}-${m}`;
-    if (!map[key]) map[key] = [];
-    map[key].push(d);
-  });
-  Object.keys(map).forEach(k => map[k].sort((a,b)=>a.dateObj - b.dateObj));
-  return map;
+function weekOfMonth(date) {
+    const [day, month, year] = date.split(".").map(Number);
+    const dt = new Date(year, month - 1, day);
+    const week = Math.ceil((dt.getDate() + 6 - dt.getDay()) / 7);
+    return week;
 }
 
-function groupDaysIntoWeeks(days) {
-  const wkMap = {};
-  days.forEach(d => {
-    const iso = getISOWeekInfo(d.dateObj);
-    const key = `${iso.year}-W${String(iso.week).padStart(2,'0')}`;
-    if (!wkMap[key]) wkMap[key] = { key, week: iso.week, year: iso.year, days: [] };
-    wkMap[key].days.push(d);
-  });
-  // compute monday/sunday and sort
-  const weeks = Object.values(wkMap).map(w => {
-    const any = w.days[0].dateObj;
-    const day = any.getDay();
-    const diffToMon = ((day + 6) % 7);
-    const monday = new Date(any); monday.setDate(any.getDate() - diffToMon);
-    const sunday = new Date(monday); sunday.setDate(monday.getDate() + 6);
-    return { ...w, monday, sunday, days: w.days.sort((a,b)=>a.dateObj - b.dateObj) };
-  });
-  weeks.sort((a,b)=>a.monday - b.monday);
-  return weeks;
-}
+/* ---------------------------------------------------------
+   DIAGRAMM GENERIERUNG
+--------------------------------------------------------- */
 
-/* ---------------------- Drawing week chart ---------------------- */
-function drawWeekCanvas(days, options, monthAvg) {
-  // options: dayWidth, retinaScale
-  const dayWidth = options.dayWidth || 110;
-  const scale = options.retinaScale || 2;
-  const padding = {left: 80, right: 40, top: 60, bottom: 120};
-  const n = days.length;
-  const widthCss = Math.max(600, padding.left + padding.right + n * dayWidth);
-  const heightCss = 320;
-  const canvas = document.createElement('canvas');
-  canvas.className = 'weekCanvas';
-  // set high-resolution
-  canvas.width = Math.round(widthCss * scale);
-  canvas.height = Math.round(heightCss * scale);
-  canvas.style.width = widthCss + 'px';
-  canvas.style.height = heightCss + 'px';
-  const ctx = canvas.getContext('2d');
-  ctx.scale(scale, scale);
-
-  // background white for PDF
-  ctx.fillStyle = '#fff'; ctx.fillRect(0,0,widthCss,heightCss);
-
-  const innerW = widthCss - padding.left - padding.right;
-  const innerH = heightCss - padding.top - padding.bottom;
-
-  // collect data values for scale
-  const vals = [];
-  days.forEach(d => {
-    ['F','M','A','S'].forEach(k=> { if (d[k]!=null) vals.push(d[k]); });
-    if (d.Z && d.Z.length) d.Z.forEach(v=>vals.push(v));
-  });
-  const maxVal = vals.length ? Math.max(...vals) : 200;
-  const yMax = Math.ceil(maxVal / 10) * 10;
-
-  // draw medium gridlines (5 steps) - medium visibility
-  ctx.lineWidth = 1;
-  const ySteps = 5;
-  for (let i=0;i<=ySteps;i++){
-    const t = i / ySteps;
-    const y = padding.top + innerH * t;
-    ctx.strokeStyle = 'rgba(0,0,0,0.12)'; // medium opacity
-    ctx.beginPath(); ctx.moveTo(padding.left, y); ctx.lineTo(widthCss - padding.right, y); ctx.stroke();
-    const val = Math.round(yMax - yMax * t);
-    strokedText(ctx, String(val), 14, y + 6, '13px Arial', '#000', '#fff', 6, 'left');
-  }
-
-  // vertical faint lines per day
-  const step = innerW / Math.max(1, n);
-  for (let i=0;i<=n;i++){
-    const x = padding.left + step * i;
-    ctx.strokeStyle = 'rgba(0,0,0,0.06)';
-    ctx.beginPath(); ctx.moveTo(x, padding.top); ctx.lineTo(x, padding.top + innerH); ctx.stroke();
-  }
-
-  // draw grouped rounded bars per day
-  const barW = Math.min(30, Math.floor(step * 0.20));
-  const offsets = [-2,-1,0,1,2]; // positions for F,M,A,S,Z
-  const colors = { F: getComputedStyle(document.documentElement).getPropertyValue('--accent1').trim() || '#9fb8ff',
-                   M: getComputedStyle(document.documentElement).getPropertyValue('--accent2').trim() || '#b6f0d6',
-                   A: getComputedStyle(document.documentElement).getPropertyValue('--accent3').trim() || '#ffd69a',
-                   S: getComputedStyle(document.documentElement).getPropertyValue('--accent4').trim() || '#ffb3b3',
-                   Z: getComputedStyle(document.documentElement).getPropertyValue('--accentZ').trim() || '#c9b3ff' };
-
-  // shadow for nicer look
-  ctx.shadowColor = 'rgba(0,0,0,0.12)';
-  ctx.shadowBlur = 6;
-  ctx.shadowOffsetY = 2;
-
-  function drawRoundedBar(x, y, w, h, radius, fillColor) {
-    ctx.fillStyle = fillColor;
-    ctx.beginPath();
-    const r = radius;
-    ctx.moveTo(x + r, y);
-    ctx.lineTo(x + w - r, y);
-    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-    ctx.lineTo(x + w, y + h - r);
-    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-    ctx.lineTo(x + r, y + h);
-    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
-    ctx.lineTo(x, y + r);
-    ctx.quadraticCurveTo(x, y, x + r, y);
-    ctx.closePath();
-    ctx.fill();
-  }
-
-  for (let kIndex=0;kIndex<5;kIndex++){
-    const key = ['F','M','A','S','Z'][kIndex];
-    for (let i=0;i<n;i++){
-      let val;
-      if (key==='Z') {
-        const z = days[i].Z || [];
-        val = z.length ? Math.round(z.reduce((a,b)=>a+b,0)/z.length) : null;
-      } else val = days[i][key];
-      if (val==null) continue;
-      const cx = padding.left + step * (i + 0.5);
-      const x = cx + offsets[kIndex] * (barW + 2);
-      const h = (val / yMax) * innerH;
-      const y = padding.top + innerH - h;
-      drawRoundedBar(x - barW/2, y, barW, h, 6, colors[key]);
-      // small value above bar
-      strokedText(ctx, String(val), x, y - 8, '12px Arial', '#000', '#fff', 6, 'center');
-    }
-  }
-
-  // remove shadow for lines
-  ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
-
-  // day averages and markers (avg per day ignoring Z)
-  const dayAvg = days.map(d=>{
-    const arr = [d.F, d.M, d.A, d.S].filter(v=>v!=null); return arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : null;
-  });
-
-  // week trend (3-day moving average of dayAvg)
-  function movingAvg(arr, w=3){
-    const out = [];
-    for (let i=0;i<arr.length;i++){
-      const s = Math.max(0, i - (w-1));
-      const seg = arr.slice(s, i+1).filter(v=>v!=null);
-      out.push(seg.length ? seg.reduce((a,b)=>a+b,0)/seg.length : null);
-    }
-    return out;
-  }
-  const weekTrend = movingAvg(dayAvg, 3);
-
-  // draw week trend (dotted)
-  ctx.beginPath();
-  ctx.setLineDash([6,6]);
-  ctx.lineWidth = 2.5;
-  ctx.strokeStyle = '#333';
-  let started=false;
-  for (let i=0;i<n;i++){
-    if (weekTrend[i]==null){ started=false; continue; }
-    const x = padding.left + step*(i + 0.5);
-    const y = padding.top + innerH - (weekTrend[i]/yMax)*innerH;
-    if (!started){ ctx.moveTo(x,y); started=true; } else ctx.lineTo(x,y);
-  }
-  ctx.stroke();
-  ctx.setLineDash([]);
-
-  // draw dayAvg points
-  for (let i=0;i<n;i++){
-    if (dayAvg[i]==null) continue;
-    const x = padding.left + step*(i+0.5);
-    const y = padding.top + innerH - (dayAvg[i]/yMax)*innerH;
-    ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(x,y,3,0,Math.PI*2); ctx.fill();
-    ctx.lineWidth = 3; ctx.strokeStyle = '#fff'; ctx.stroke();
-  }
-
-  // draw monthly average (dashed thicker) across whole week canvas
-  if (monthAvg != null) {
-    ctx.beginPath();
-    ctx.setLineDash([3,6]);
-    ctx.lineWidth = 2.5;
-    ctx.strokeStyle = '#000';
-    const y = padding.top + innerH - (monthAvg / yMax) * innerH;
-    ctx.moveTo(padding.left, y); ctx.lineTo(widthCss - padding.right, y); ctx.stroke();
-    ctx.setLineDash([]);
-    strokedText(ctx, 'Monats-Ø: ' + Math.round(monthAvg) + ' mg/dL', widthCss - padding.right - 10, y - 8, '12px Arial', '#000', '#fff', 6, 'right');
-  }
-
-  // vertical rotated date labels (90°)
-  ctx.save();
-  ctx.fillStyle = '#000'; ctx.font = '13px Arial';
-  for (let i=0;i<n;i++){
-    const lbl = days[i].label;
-    const x = padding.left + step*(i+0.5);
-    const y = heightCss - padding.bottom + 60;
-    ctx.translate(x,y); ctx.rotate(-Math.PI/2);
-    ctx.lineWidth = 6; ctx.strokeStyle = '#fff'; ctx.strokeText(lbl, 0, 0);
-    ctx.fillStyle = '#000'; ctx.fillText(lbl, 0, 0);
-    ctx.rotate(Math.PI/2); ctx.translate(-x,-y);
-  }
-  ctx.restore();
-
-  // title for the week (drawn by caller if needed)
-  // legend not drawn per canvas (we'll include one per month page)
-
-  return {canvas, dayAvg, weekTrend, yMax};
-}
-
-/* ---------------------- Build month pages ---------------------- */
-document.getElementById('btnGen').addEventListener('click', ()=> {
-  const raw = document.getElementById('txt').value;
-  const dayWidth = parseInt(document.getElementById('dayWidth').value || '110',10);
-  const container = document.getElementById('canvasContainer');
-  container.innerHTML = '';
-  const days = parseTextToDays(raw);
-  if (!days.length) { alert('Keine Daten gefunden. Bitte Datumformat TT.MM.JJJJ'); return; }
-  days.sort((a,b)=>a.dateObj - b.dateObj);
-  const months = groupByMonth(days);
-
-  // compute overall start and end labels for filename later
-  const startLabel = days[0].label;
-  const endLabel = days[days.length-1].label;
-  container.setAttribute('data-start', startLabel);
-  container.setAttribute('data-end', endLabel);
-
-  for (const monthKey of Object.keys(months).sort()) {
-    const monthDays = months[monthKey];
-    const weeks = groupDaysIntoWeeks(monthDays);
-    // filter weeks that actually contain days from this month (ensure ordering)
-    const monthDiv = document.createElement('div'); monthDiv.className = 'monthPage';
-    const firstLabel = monthDays[0].label, lastLabel = monthDays[monthDays.length-1].label;
-    const header = document.createElement('div'); header.className = 'monthHeader';
-    const title = document.createElement('div'); title.className = 'monthTitle';
-    title.textContent = `Monat ${monthKey} — ${firstLabel} bis ${lastLabel}`;
-    header.appendChild(title);
-    // legend (single per month)
-    const legend = document.createElement('div'); legend.className = 'legend';
-    function leg(name,color){ const it=document.createElement('div'); it.className='legendItem'; it.innerHTML=`<span class="legendColor" style="background:${color}"></span><span>${name}</span>`; legend.appendChild(it); }
-    leg('Frühstück', getComputedStyle(document.documentElement).getPropertyValue('--accent1') || '#9fb8ff');
-    leg('Mittag', getComputedStyle(document.documentElement).getPropertyValue('--accent2') || '#b6f0d6');
-    leg('Abend', getComputedStyle(document.documentElement).getPropertyValue('--accent3') || '#ffd69a');
-    leg('Schlafen', getComputedStyle(document.documentElement).getPropertyValue('--accent4') || '#ffb3b3');
-    leg('Zwischen', getComputedStyle(document.documentElement).getPropertyValue('--accentZ') || '#c9b3ff');
-    leg('Wochendurchschnitt', '#333');
-    leg('Monatsdurchschnitt', '#000');
-    header.appendChild(legend);
-    monthDiv.appendChild(header);
-
-    // compute month average
-    const allVals = [];
-    monthDays.forEach(d => { ['F','M','A','S'].forEach(k=>{ if (d[k]!=null) allVals.push(d[k]); }); });
-    const monthAvg = allVals.length ? allVals.reduce((a,b)=>a+b,0) / allVals.length : null;
-    const meta = document.createElement('div'); meta.className='metaSmall'; meta.textContent = monthAvg ? `Monatsdurchschnitt (ohne Zwischen): ${Math.round(monthAvg)} mg/dL` : 'Monatsdurchschnitt: n/a'; monthDiv.appendChild(meta);
-
-    // weeks under each other
-    weeks.forEach(w => {
-      // only keep days of this month
-      const daysInMonth = w.days.filter(d => {
-        const k = `${d.dateObj.getFullYear()}-${String(d.dateObj.getMonth()+1).padStart(2,'0')}`;
-        return k === monthKey;
-      });
-      if (!daysInMonth.length) return;
-      // ensure sorted
-      daysInMonth.sort((a,b)=>a.dateObj - b.dateObj);
-      // draw canvas for week
-      const title = `KW ${w.week} — ${w.monday.toLocaleDateString()} bis ${w.sunday.toLocaleDateString()}`;
-      const {canvas} = drawWeekCanvas(daysInMonth, {dayWidth: dayWidth, retinaScale:2}, monthAvg);
-      // add small week title
-      const weekTitle = document.createElement('div'); weekTitle.style.fontWeight='600'; weekTitle.style.marginTop='8px'; weekTitle.textContent = title;
-      monthDiv.appendChild(weekTitle);
-      monthDiv.appendChild(canvas);
-      // week average summary (right)
-      const vals = []; daysInMonth.forEach(d=>{ ['F','M','A','S'].forEach(k=>{ if (d[k]!=null) vals.push(d[k]); }); });
-      const weekAvg = vals.length ? Math.round(vals.reduce((a,b)=>a+b,0) / vals.length) : null;
-      const small = document.createElement('div'); small.className='metaSmall'; small.textContent = weekAvg ? `Wochendurchschnitt: ${weekAvg} mg/dL` : 'Wochendurchschnitt: n/a';
-      monthDiv.appendChild(small);
+function makeChart(ctx, dayData, wAvg, mAvg) {
+    return new Chart(ctx, {
+        type: "bar",
+        data: {
+            labels: ["Früh", "Mittag", "Abend", "Schlaf"],
+            datasets: [
+                {
+                    label: "Werte",
+                    data: [dayData.Früh, dayData.Mittag, dayData.Abend, dayData.Schlaf],
+                    backgroundColor: "rgba(100,150,255,0.7)",
+                    borderColor: "white",
+                    borderWidth: 1,
+                    barThickness: 25
+                },
+                {
+                    label: "Tagesschnitt",
+                    data: [dayData.avg, dayData.avg, dayData.avg, dayData.avg],
+                    type: "line",
+                    borderColor: "yellow",
+                    borderWidth: 2
+                },
+                {
+                    label: "Wochenschnitt",
+                    data: [wAvg, wAvg, wAvg, wAvg],
+                    type: "line",
+                    borderColor: "orange",
+                    borderWidth: 2
+                },
+                {
+                    label: "Monatsschnitt",
+                    data: [mAvg, mAvg, mAvg, mAvg],
+                    type: "line",
+                    borderColor: "cyan",
+                    borderWidth: 2
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                y: {
+                    beginAtZero: false,
+                    grid: { color: "rgba(255,255,255,0.15)" }
+                },
+                x: {
+                    grid: { color: "rgba(255,255,255,0.08)" }
+                }
+            }
+        }
     });
+}
 
-    document.getElementById('canvasContainer').appendChild(monthDiv);
-  }
+/* ---------------------------------------------------------
+   SEITEN GENERIERUNG
+--------------------------------------------------------- */
 
-  window.scrollTo({top:0,behavior:'smooth'});
-});
+function buildPages() {
+    const parsed = parseData(rawText);
+    const months = groupByMonth(parsed);
 
-/* ---------------------- PDF export ---------------------- */
-document.getElementById('btnPDF').addEventListener('click', ()=> {
-  const container = document.getElementById('canvasContainer');
-  const monthDivs = container.querySelectorAll('.monthPage');
-  if (!monthDivs.length) { alert('Bitte zuerst Diagramm erstellen.'); return; }
-  // start and end for filename
-  const start = container.getAttribute('data-start') || 'start';
-  const end = container.getAttribute('data-end') || 'end';
+    const container = document.getElementById("content");
 
-  const win = window.open('', '_blank');
-  const style = `<style>
-    body{margin:0;padding:10px;font-family:Arial;background:#fff;color:#000}
-    .page{width:794px;margin:0 auto 18px auto;page-break-after:always}
-    img{display:block;width:100%;height:auto;border:1px solid #ccc}
-    h2{text-align:center;margin:8px 0}
-  </style>`;
-  win.document.write('<html><head><title>Glukose_'+start+'-'+end+'</title>'+style+'</head><body>');
-  (async () => {
-    for (let md of monthDivs) {
-      const canvases = md.querySelectorAll('canvas');
-      if (!canvases.length) continue;
-      // create big canvas combining header and each week canvas
-      // measure total height
-      let totalW = canvases[0].width; // same width for all week canvases in this implementation
-      let totalH = 0;
-      // header area: approx 80 px
-      totalH += 100;
-      canvases.forEach(c => totalH += c.height + 24);
-      const big = document.createElement('canvas'); big.width = totalW; big.height = totalH;
-      const ctx = big.getContext('2d');
-      // white background
-      ctx.fillStyle = '#fff'; ctx.fillRect(0,0,big.width,big.height);
-      // draw header (month title)
-      const headerText = md.querySelector('.monthTitle')?.textContent || '';
-      ctx.fillStyle = '#000'; ctx.font = '20px Arial'; ctx.textAlign = 'center';
-      ctx.fillText(headerText, big.width/2, 28);
-      // month meta
-      const metaText = md.querySelector('.metaSmall')?.textContent || '';
-      ctx.font = '13px Arial'; ctx.fillText(metaText, big.width/2, 52);
-      let y = 80;
-      for (let c of canvases) {
-        ctx.drawImage(c, 0, y);
-        y += c.height + 24;
-      }
-      const data = big.toDataURL('image/png');
-      win.document.write('<div class="page"><img src="'+data+'"></div>');
+    for (const month in months) {
+        const monthPage = document.createElement("div");
+        monthPage.className = "month-page";
+
+        monthPage.innerHTML += `<h2>Monat: ${month}</h2>
+            <div class='legend'>
+                <b>Gelb:</b> Tagesschnitt &nbsp;&nbsp;
+                <b>Orange:</b> Wochenschnitt &nbsp;&nbsp;
+                <b>Cyan:</b> Monatsschnitt
+            </div>`;
+
+        const dates = Object.keys(months[month]).sort();
+
+        // Monatsschnitt berechnen
+        const allValues = [];
+        for (const d of dates) {
+            const v = months[month][d];
+            const vals = [v.Früh, v.Mittag, v.Abend, v.Schlaf].filter(x => x);
+            allValues.push(...vals);
+        }
+        const monthAvg = Math.round(allValues.reduce((a,b)=>a+b,0) / allValues.length);
+
+        const weeks = {};
+
+        for (const d of dates) {
+            const w = weekOfMonth(d);
+            if (!weeks[w]) weeks[w] = [];
+            weeks[w].push(d);
+        }
+
+        for (const w in weeks) {
+            const weekBlock = document.createElement("div");
+            weekBlock.className = "week-block";
+
+            weekBlock.innerHTML += `<div class='week-title'>Woche ${w}</div>`;
+
+            const weekDates = weeks[w];
+
+            // Wochenschnitt
+            const wvals = [];
+            for (const d of weekDates) {
+                const v = months[month][d];
+                wvals.push(...[v.Früh, v.Mittag, v.Abend, v.Schlaf].filter(x=>x));
+            }
+            const weekAvg = Math.round(wvals.reduce((a,b)=>a+b,0) / wvals.length);
+
+            for (const d of weekDates) {
+                const dayset = months[month][d];
+                const values = [dayset.Früh, dayset.Mittag, dayset.Abend, dayset.Schlaf].filter(x => x != null);
+                const avg = Math.round(values.reduce((a,b)=>a+b,0) / values.length);
+                dayset.avg = avg;
+
+                const chartDiv = document.createElement("div");
+                chartDiv.className = "chart-container";
+
+                chartDiv.innerHTML = `<h3>${d} (Ø ${avg})</h3>
+                    <canvas></canvas>`;
+
+                weekBlock.appendChild(chartDiv);
+
+                const ctx = chartDiv.querySelector("canvas").getContext("2d");
+                makeChart(ctx, dayset, weekAvg, monthAvg);
+            }
+
+            monthPage.appendChild(weekBlock);
+        }
+
+        container.appendChild(monthPage);
     }
-    win.document.write('</body></html>');
-    win.document.close();
-    // small delay then print
-    setTimeout(()=>{ win.focus(); win.print(); }, 600);
-  })();
-});
+}
 
-/* ---------------------- Clear ---------------------- */
-document.getElementById('btnClear').addEventListener('click', ()=> {
-  document.getElementById('txt').value = '';
-  document.getElementById('canvasContainer').innerHTML = '';
-  document.getElementById('canvasContainer').removeAttribute('data-start');
-  document.getElementById('canvasContainer').removeAttribute('data-end');
-});
+/* ---------------------------------------------------------
+   PDF EXPORT
+--------------------------------------------------------- */
+
+async function exportPDF() {
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({ unit: "px", format: "a4" });
+
+    const pages = document.querySelectorAll(".month-page");
+
+    for (let i = 0; i < pages.length; i++) {
+        if (i !== 0) pdf.addPage();
+        await pdf.html(pages[i], { x: 10, y: 10 });
+    }
+
+    // PDF Name = erster + letzter Tag
+    const keys = Object.keys(parseData(rawText)).sort();
+    const name = `${keys[0]}_bis_${keys[keys.length - 1]}.pdf`;
+
+    pdf.save(name);
+}
+
+buildPages();
 </script>
+
 </body>
 </html>
-
