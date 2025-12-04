@@ -155,4 +155,120 @@ function groupByMonth(data) {
 
 /* -------------------------------------------------------
    Durchschnitt berechnen
---------------------------
+--------------------------------------------------------- */
+function avg(arr) {
+    if (!arr.length) return null;
+    return arr.reduce((a,b)=>a+b,0)/arr.length;
+}
+
+/* -------------------------------------------------------
+   Diagramm generieren
+--------------------------------------------------------- */
+function makeChart(containerId, title, data) {
+
+    const labels = data.map(e => e.date + " ("+e.type+")");
+    const values = data.map(e => e.value);
+
+    // Wochendurchschnitt pro 7 Einträge
+    const weeklyAvg = values.map((_,i)=>{
+        const block = values.slice(Math.max(0,i-6), i+1);
+        return avg(block);
+    });
+
+    // Monatsdurchschnitt (ein Wert durchgehend)
+    const monthAvg = values.map(()=> avg(values));
+
+    new Chart(document.getElementById(containerId), {
+        type: "line",
+        data: {
+            labels,
+            datasets: [
+                {
+                    label: "Wert",
+                    data: values,
+                    borderWidth: 3,
+                    tension: 0.15
+                },
+                {
+                    label: "Wochendurchschnitt",
+                    data: weeklyAvg,
+                    borderDash: [6,6],
+                    borderWidth: 2
+                },
+                {
+                    label: "Monatsdurchschnitt",
+                    data: monthAvg,
+                    borderDash: [2,6],
+                    borderWidth: 3
+                }
+            ]
+        },
+        options: {
+            scales: {
+                x: {
+                    ticks: {
+                        color: "#fff",
+                        font: { weight:"bold" }
+                    },
+                    grid: {
+                        color: "rgba(255,255,255,0.1)"
+                    }
+                },
+                y: {
+                    ticks: {
+                        color: "#fff",
+                        callback: v => v,
+                        font: { weight:"bold" }
+                    },
+                    grid: {
+                        color: "rgba(255,255,255,0.15)"
+                    }
+                }
+            },
+            plugins: {
+                title: {
+                    display: true,
+                    text: title,
+                    color: "#fff",
+                    font: { size: 22, weight: "bold" }
+                },
+                legend: {
+                    labels: {
+                        color: "#fff",
+                        font: { weight:"bold" }
+                    }
+                }
+            }
+        }
+    });
+}
+
+/* -------------------------------------------------------
+   HTML erzeugen
+--------------------------------------------------------- */
+window.onload = () => {
+    const months = groupByMonth(entries);
+    const container = document.getElementById("charts");
+
+    let counter = 1;
+
+    for (const [month, data] of Object.entries(months)) {
+        const canvasId = "chart"+counter;
+
+        container.innerHTML += `
+            <h2>Monat ${month}</h2>
+            <canvas id="${canvasId}" width="1400" height="700"></canvas>
+        `;
+
+        makeChart(canvasId, `Glukose-Werte Monat ${month}`, data);
+        counter++;
+    }
+};
+</script>
+
+</head>
+<body>
+<h1 style="text-shadow:0 0 3px #000;">Glukose-Auswertung</h1>
+<div id="charts"></div>
+</body>
+</html>
