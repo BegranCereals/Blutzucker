@@ -1,217 +1,236 @@
 <!DOCTYPE html>
 <html lang="de">
 <head>
-<meta charset="UTF-8">
-<title>Blutzucker Diagramm + PDF Export (Offline)</title>
-
+<meta charset="utf-8">
+<title>Blutzucker PDF Export – Offline (v3)</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
-body { font-family: Arial, sans-serif; padding: 20px; }
-canvas { width: 100%; max-width: 900px; height: 400px; margin-bottom: 30px; }
-textarea { width: 100%; height: 200px; margin-top: 10px; }
-button { padding: 10px 20px; margin: 10px 0; }
+  body { font-family: Arial, Helvetica, sans-serif; padding:16px; background:#fff; color:#111; }
+  textarea { width:100%; height:220px; font-size:14px; margin-bottom:10px; }
+  button { padding:10px 14px; margin-right:8px; font-size:15px; }
+  #output canvas { display:block; margin:18px auto; border:1px solid #ddd; width:100%; max-width:900px; height:360px; }
+  @media (prefers-color-scheme: dark) {
+    body { background:#0b0b0d; color:#eee; }
+    textarea { background:#111; color:#eee; border:1px solid #333; }
+    button { background:#222; color:#eee; border:1px solid #333; }
+  }
 </style>
-
 </head>
+
 <body>
 
-<h2>📊 Blutzucker Diagramm – Offline + PDF Export</h2>
-
-<p>Füge unten deinen Text ein und klicke auf <b>Diagramm erstellen</b>.  
-Danach kannst du alles als <b>PDF exportieren</b>.</p>
-
+<h2>📊 Blutzucker – Offline PDF (mit Zwischenmessung & Auto-Dateiname)</h2>
 <textarea id="textinput" placeholder="Hier deinen Text einfügen…"></textarea>
 <br>
-
-<button onclick="buildCharts()">Diagramm erstellen</button>
-<button onclick="exportPDF()">PDF exportieren</button>
+<button id="btnBuild">Diagramm erstellen</button>
+<button id="btnPDF">PDF exportieren</button>
 
 <div id="output"></div>
 
 <script>
-/* ------------------------------------------------------------------
-   1) EINGEBAUTE MINI-CHART-BIBLIOTHEK (ohne Internet)
------------------------------------------------------------------- */
-class Chart{
-constructor(canvas, config){
-this.canvas = canvas;
-this.ctx = canvas.getContext("2d");
-this.labels = config.data.labels;
-this.datasets = config.data.datasets;
-this.render();
+/* ---------------- HELPERS ---------------- */
+function strokedText(ctx, text, x, y, font="16px Arial", color="#000", outline="#fff", lw=6, align="left"){
+  ctx.font = font;
+  ctx.textAlign = align;
+  ctx.lineWidth = lw;
+  ctx.strokeStyle = outline;
+  ctx.strokeText(text, x, y);
+  ctx.fillStyle = color;
+  ctx.fillText(text, x, y);
 }
 
-render(){
-const ctx = this.ctx;
-const W = this.canvas.width;
-const H = this.canvas.height;
-ctx.clearRect(0,0,W,H);
+/* ---------------- PARSER ---------------- */
+function parseTextToDays(txt) {
+  const lines = txt.split(/\r?\n/).map(s=>s.trim());
+  const dateRegex = /^\d{1,2}\.\d{1,2}\.\d{4}/;
+  const days = [];
+  let cur = null;
 
-let maxY = 0;
-this.datasets.forEach(ds => {
-ds.data.forEach(v => { if (v > maxY) maxY = v; });
-});
-maxY = Math.ceil(maxY / 10) * 10;
+  for (let line of lines){
+    if (!line) continue;
 
-const pad = 50;
-const stepX = (W - pad*2) / (this.labels.length - 1 || 1);
-const stepY = (H - pad*2) / maxY;
+    if (dateRegex.test(line)) {
+      if (cur) days.push(cur);
 
-ctx.font = "14px Arial";
-
-/* Y-Linien */
-for (let i=0;i<=5;i++){
-let y = pad + (H-pad*2)*(i/5);
-let v = Math.round(maxY - maxY*(i/5));
-ctx.fillText(v, 5, y+5);
-
-ctx.beginPath();
-ctx.strokeStyle = "#ddd";
-ctx.moveTo(pad, y);
-ctx.lineTo(W-pad, y);
-ctx.stroke();
-}
-
-/* Bars & Lines */
-this.datasets.forEach(ds => {
-ctx.strokeStyle = ds.color;
-ctx.fillStyle = ds.color;
-
-if (ds.type === "bar"){
-let barW = stepX * 0.20;
-ds.data.forEach((v,i)=>{
-let x = pad + stepX*i + barW*ds.offset;
-let y = H - pad - v*stepY;
-ctx.fillRect(x, y, barW, v*stepY);
-});
-}
-
-if (ds.type === "line"){
-ctx.beginPath();
-ds.data.forEach((v,i)=>{
-let x = pad + stepX*i;
-let y = H - pad - v*stepY;
-if (i===0) ctx.moveTo(x,y);
-else ctx.lineTo(x,y);
-});
-ctx.stroke();
-}
-});
-}
-}
-
-/* ------------------------------------------------------------------
-   2) PARSER
------------------------------------------------------------------- */
-function parseText(txt){
-const lines = txt.split("\n").map(l => l.trim());
-let items = [];
-let current = null;
-
-const dRe = /^(\d{2}\.\d{2}\.\d{4})/;
-for (let line of lines){
-const d = line.match(dRe);
-if (d){
-if (current) items.push(current);
-current = { date: d[1].slice(0,5), F:null,M:null,A:null,S:null };
-continue;
-}
-if (!current) continue;
-
-if (line.toLowerCase().startsWith("früh")) current.F = num(line);
-if (line.toLowerCase().startsWith("mittag")) current.M = num(line);
-if (line.toLowerCase().startsWith("abend")) current.A = num(line);
-if (line.toLowerCase().startsWith("schlaf")) current.S = num(line);
-}
-if (current) items.push(current);
-return items;
-}
-
-function num(line){
-const m = line.match(/(\d{2,3})/);
-return m ? parseInt(m[1]) : null;
-}
-
-/* ------------------------------------------------------------------
-   3) DIAGRAMME ERSTELLEN
------------------------------------------------------------------- */
-function buildCharts(){
-const txt = document.getElementById("textinput").value;
-const data = parseText(txt);
-const output = document.getElementById("output");
-output.innerHTML = "";
-
-if (data.length === 0){
-output.innerHTML = "<p>❌ Keine Daten gefunden.</p>";
-return;
-}
-
-let chunks = [];
-for(let i=0;i<data.length;i+=20){
-chunks.push(data.slice(i,i+20));
-}
-
-chunks.forEach((chunk,idx)=>{
-let canvas = document.createElement("canvas");
-canvas.width = 900;
-canvas.height = 400;
-output.appendChild(canvas);
-
-drawChunk(canvas,chunk);
-});
-}
-
-function drawChunk(canvas,days){
-const labels = days.map(d=>d.date);
-const F = days.map(d=>d.F??0);
-const M = days.map(d=>d.M??0);
-const A = days.map(d=>d.A??0);
-const S = days.map(d=>d.S??0);
-
-const avg = days.map(d=>{
-let arr=[d.F,d.M,d.A,d.S].filter(v=>v!=null);
-return Math.round(arr.reduce((a,b)=>a+b,0)/arr.length);
-});
-
-new Chart(canvas,{
-    data:{
-        labels:labels,
-        datasets:[
-            {type:"bar", data:F, color:"#3b82f6", offset:0},
-            {type:"bar", data:M, color:"#10b981", offset:1},
-            {type:"bar", data:A, color:"#f59e0b", offset:2},
-            {type:"bar", data:S, color:"#ef4444", offset:3},
-            {type:"line", data:avg, color:"#000"}
-        ]
+      const d = line.match(dateRegex)[0];
+      const [dd,mm] = d.split('.');
+      cur = { date: dd.padStart(2,"0")+"."+mm.padStart(2,"0"), F:null, M:null, A:null, S:null, Z:[] };
+      continue;
     }
+
+    if (!cur) continue;
+
+    const low = line.toLowerCase();
+    const num = line.match(/(\d{2,3})(?!.*\d)/);
+    const val = num ? parseInt(num[1]) : null;
+
+    if (low.startsWith("früh") || low.startsWith("frueh")) cur.F = val;
+    else if (low.startsWith("mittag")) cur.M = val;
+    else if (low.startsWith("abend")) cur.A = val;
+    else if (low.startsWith("schlaf")) cur.S = val;
+    else if (low.includes("zwischen") || low.includes("messung")) {
+      if (val != null) cur.Z.push(val);
+    }
+  }
+
+  if (cur) days.push(cur);
+  return days;
+}
+
+/* ---------------- CHART RENDER ---------------- */
+function drawChart(canvas, days, title) {
+  const ctx = canvas.getContext("2d");
+  const W = canvas.width = 1600;
+  const H = canvas.height = 500;
+  ctx.fillStyle="#fff"; ctx.fillRect(0,0,W,H);
+
+  const pl=70, pr=40, pt=50, pb=120;
+  const iw=W-pl-pr, ih=H-pt-pb;
+
+  const labels = days.map(d=>d.date);
+  const F=days.map(d=>d.F), M=days.map(d=>d.M), A=days.map(d=>d.A), S=days.map(d=>d.S);
+  const Z=days.map(d=>d.Z.length? Math.round(d.Z.reduce((a,b)=>a+b)/d.Z.length):null);
+
+  const allVals = [].concat(F,M,A,S,Z).filter(v=>v!=null);
+  const maxV = allVals.length ? Math.ceil(Math.max(...allVals)/10)*10 : 200;
+
+  const ySteps = 5;
+  for (let i=0;i<=ySteps;i++){
+    const t=i/ySteps;
+    const y=pt+ih*t;
+    ctx.strokeStyle="#ddd";
+    ctx.beginPath(); ctx.moveTo(pl,y); ctx.lineTo(W-pr,y); ctx.stroke();
+    const val=Math.round(maxV-(maxV*t));
+    strokedText(ctx,String(val),10,y+5,"14px Arial","#000","#fff",6,"left");
+  }
+
+  const n=labels.length;
+  const step=iw/n;
+  const bw=Math.min(22, step*0.15);
+
+  const colors = {
+    F:"#2563eb",
+    M:"#10b981",
+    A:"#f59e0b",
+    S:"#ef4444",
+    Z:"#8b5cf6" // Lila
+  };
+
+  function drawBars(arr,color,shift){
+    ctx.fillStyle=color;
+    for (let i=0;i<n;i++){
+      const v=arr[i]; if (v==null) continue;
+      const cx=pl+step*(i+0.5);
+      const x=cx+shift*bw;
+      const h=(v/maxV)*ih;
+      const y=pt+ih-h;
+      ctx.fillRect(x-bw/2, y, bw, h);
+    }
+  }
+
+  drawBars(F,colors.F,-2);  
+  drawBars(M,colors.M,-1);
+  drawBars(A,colors.A, 1);
+  drawBars(S,colors.S, 2);
+  drawBars(Z,colors.Z, 3); // Zwischenwerte
+
+  // ⬛ Durchschnitt ohne Zwischenwerte
+  const avg = days.map(d=>{
+    const arr=[d.F,d.M,d.A,d.S].filter(v=>v!=null);
+    return arr.length? arr.reduce((a,b)=>a+b)/arr.length : null;
+  });
+
+  ctx.lineWidth=3; ctx.strokeStyle="#000"; ctx.beginPath();
+  let started=false;
+  for (let i=0;i<n;i++){
+    if (avg[i]==null){ started=false; continue; }
+    const x=pl+step*(i+0.5);
+    const y=pt+ih - (avg[i]/maxV)*ih;
+    if (!started){ ctx.moveTo(x,y); started=true; }
+    else ctx.lineTo(x,y);
+  }
+  ctx.stroke();
+
+  for (let i=0;i<n;i++){
+    if (avg[i]==null) continue;
+    const x=pl+step*(i+0.5);
+    const y=pt+ih - (avg[i]/maxV)*ih;
+    ctx.beginPath(); ctx.fillStyle="#000"; ctx.arc(x,y,4,0,Math.PI*2); ctx.fill();
+  }
+
+  // X-Labels
+  for (let i=0;i<n;i++){
+    const x=pl+step*(i+0.5);
+    const y=H-pb+60;
+    strokedText(ctx, labels[i], x, y, "14px Arial", "#000", "#fff", 6, "center");
+  }
+
+  // Titel
+  strokedText(ctx, title, W/2, 28, "20px Arial", "#000","#fff",8,"center");
+
+  // Legende
+  const lx=W-pr-200; let ly=pt;
+  function leg(text,color){
+    ctx.fillStyle=color; ctx.fillRect(lx, ly-12,14,10);
+    strokedText(ctx, text, lx+22, ly-2, "13px Arial", "#000", "#fff",6,"left");
+    ly+=22;
+  }
+  leg("Frühstück",colors.F);
+  leg("Mittag",colors.M);
+  leg("Abend",colors.A);
+  leg("Schlafen",colors.S);
+  leg("Zwischen",colors.Z);
+  leg("Durchschnitt","#000");
+}
+
+/* ---------------- BUILD UI ---------------- */
+let globalDays = [];
+
+document.getElementById("btnBuild").addEventListener("click",()=>{
+  const txt = document.getElementById("textinput").value;
+  globalDays = parseTextToDays(txt);
+
+  const out=document.getElementById("output");
+  out.innerHTML="";
+
+  if (globalDays.length===0){ out.innerHTML="<p>Keine Daten!</p>"; return; }
+
+  for (let i=0;i<globalDays.length;i+=20){
+    const chunk=globalDays.slice(i,i+20);
+    const c=document.createElement("canvas");
+    out.appendChild(c);
+    drawChart(c, chunk, `${chunk[0].date} – ${chunk[chunk.length-1].date}`);
+  }
 });
-}
 
-/* ------------------------------------------------------------------
-   4) PDF EXPORT – OHNE INTERNET!
------------------------------------------------------------------- */
-function exportPDF(){
-const canvases = document.querySelectorAll("canvas");
-if (canvases.length === 0){
-alert("Bitte zuerst Diagramme erstellen.");
-return;
-}
+/* ---------------- EXPORT PDF (PNG) ---------------- */
+document.getElementById("btnPDF").addEventListener("click",()=>{
+  const canv = document.querySelectorAll("#output canvas");
+  if (!canv.length){ alert("Bitte zuerst Diagramme erstellen."); return; }
 
-const pdfCanvas = document.createElement("canvas");
-pdfCanvas.width = 900;
-pdfCanvas.height = canvases.length * 450;
-const ctx = pdfCanvas.getContext("2d");
+  const start = globalDays[0]?.date || "Start";
+  const end   = globalDays[globalDays.length-1]?.date || "Ende";
 
-let y = 0;
-canvases.forEach(c=>{
+  const W=canv[0].width;
+  const Hsum = [...canv].reduce((a,c)=>a+c.height+40,20);
+
+  const big=document.createElement("canvas");
+  big.width=W; big.height=Hsum;
+  const ctx=big.getContext("2d");
+  ctx.fillStyle="#fff"; ctx.fillRect(0,0,W,Hsum);
+
+  let y=20;
+  canv.forEach(c=>{
     ctx.drawImage(c,0,y);
-    y += 450;
-});
+    y+=c.height+40;
+  });
 
-const a = document.createElement("a");
-a.href = pdfCanvas.toDataURL("image/png");
-a.download = "Blutzucker.pdf";
-a.click();
-}
+  const url = big.toDataURL("image/png");
+  const a=document.createElement("a");
+  a.href=url;
+  a.download=`Blutzucker_${start}_${end}.png`;
+  a.click();
+});
 </script>
 
 </body>
