@@ -1,345 +1,260 @@
 <!DOCTYPE html>
 <html lang="de">
 <head>
-<meta charset="UTF-8">
-<title>Blutzucker Diagramme</title>
+<meta charset="UTF-8" />
+<title>Glukose Diagramm Generator</title>
 
 <style>
     body {
-        background: #222;
-        color: #fff;
         font-family: Arial, sans-serif;
-        margin: 0;
+        background: #111;
+        color: #eee;
         padding: 20px;
     }
 
-    h1, h2, h3, .legend {
-        -webkit-text-stroke: 0.5px white; /* dünnere weiße Kontur */
-    }
-
-    .month-page {
-        page-break-after: always;
-        padding-bottom: 40px;
-    }
-
-    .week-block {
-        margin-bottom: 40px;
-        padding: 15px;
-        border: 1px solid #666;
-        border-radius: 8px;
-    }
-
-    .week-title {
-        font-size: 20px;
-        margin-bottom: 10px;
-        -webkit-text-stroke: 0.4px white;
-    }
-
-    .chart-container {
-        height: 280px; /* höheres Diagramm */
-        margin-bottom: 30px;
-    }
-
-    .legend {
-        font-size: 16px;
-        margin-bottom: 10px;
-    }
-
-    .download-btn {
-        background: #4caf50;
+    h1 {
+        text-align: center;
         color: white;
-        padding: 10px 16px;
-        border-radius: 8px;
-        display: inline-block;
-        cursor: pointer;
-        margin: 10px 0;
+        -webkit-text-stroke: 0.6px black;
     }
+
+    textarea {
+        width: 100%;
+        height: 220px;
+        font-size: 14px;
+        background: #000;
+        color: #fff;
+        border: 1px solid #666;
+        padding: 10px;
+    }
+
+    button {
+        padding: 12px;
+        margin-top: 10px;
+        background: #4CAF50;
+        border: none;
+        color: white;
+        font-size: 16px;
+        cursor: pointer;
+        width: 100%;
+    }
+
+    button:hover {
+        background: #45A049;
+    }
+
+    canvas {
+        margin-top: 30px;
+        width: 100%;
+        border: 1px solid #444;
+        background: #222;
+    }
+
+    .page {
+        page-break-after: always;
+        margin-bottom: 60px;
+    }
+
+    .legend-box {
+        font-size: 14px;
+        margin-bottom: 10px;
+        color: #fff;
+        -webkit-text-stroke: 0.4px black;
+    }
+
 </style>
-
-<script src="https://cdnjs.cloudflare.com/ajax/libs/chart.js/4.4.1/chart.umd.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-
 </head>
 <body>
 
-<h1>Blutzucker Diagramm – Automatische Monatsansicht</h1>
-<div class="download-btn" onclick="exportPDF()">📄 PDF Exportieren</div>
+<h1>Glukose Diagramm Generator</h1>
 
-<div id="content"></div>
+<p>Trage deine Daten hier ein:</p>
+<textarea id="input"></textarea>
+<button onclick="generate()">Diagramm erzeugen</button>
+
+<div id="output"></div>
 
 <script>
-/* -----------------------------
-   BENUTZERDATEN HIER EINFÜGEN
-   ----------------------------- */
-const rawText = `
-20.10.2025 Frühstück 117
-20.10.2025 Mittagessen 139
-20.10.2025 Abendessen 93
-20.10.2025 Schlafen 122
-
-21.10.2025 Frühstück 109
-21.10.2025 Mittagessen 109
-21.10.2025 Abendessen 106
-21.10.2025 Schlafen 116
-
-22.10.2025 Frühstück 118
-22.10.2025 Mittagessen 94
-22.10.2025 Abendessen 115
-22.10.2025 Schlafen 100
-
-23.10.2025 Frühstück 114
-23.10.2025 Mittagessen 97
-23.10.2025 Abendessen 118
-23.10.2025 Schlafen 130
-
-24.10.2025 Frühstück 115
-24.10.2025 Zwischen 167
-24.10.2025 Zwischen 103
-24.10.2025 Mittagessen 124
-24.10.2025 Abendessen 92
-24.10.2025 Schlafen 183
-
-25.10.2025 Frühstück 97
-25.10.2025 Mittagessen 86
-25.10.2025 Abendessen 158
-25.10.2025 Schlafen 145
-
-26.10.2025 Frühstück 102
-26.10.2025 Mittagessen 94
-26.10.2025 Abendessen 124
-26.10.2025 Schlafen 160
-
-27.10.2025 Frühstück 136
-27.10.2025 Mittagessen 84
-27.10.2025 Abendessen 104
-27.10.2025 Schlafen 97
-
-28.10.2025 Frühstück 113
-28.10.2025 Mittagessen 84
-28.10.2025 Abendessen 114
-28.10.2025 Schlafen 115
-
-29.10.2025 Frühstück 109
-29.10.2025 Mittagessen 100
-29.10.2025 Abendessen 113
-29.10.2025 Schlafen 87
-`;
-
-/* ------------------------------------------------------------
-   PARSER – extrahiert Datum → Werte (Früh, Mittag, Abend, Schlaf)
------------------------------------------------------------- */
+/* ---------------------------------------------------------
+   Hilfsfunktionen
+------------------------------------------------------------*/
 
 function parseData(text) {
-    const lines = text.trim().split("\n");
-    const data = {};
+    const lines = text.split("\n").map(l => l.trim());
+    const entries = [];
+    let currentDate = null;
 
-    for (let ln of lines) {
-        ln = ln.trim();
-        if (!ln) continue;
+    for (let line of lines) {
+        if (line.match(/^\d{1,2}\.\d{1,2}\.\d{4}$/)) {
+            currentDate = line;
+            continue;
+        }
 
-        const parts = ln.split(" ");
-        const date = parts[0];
-
-        if (!data[date]) data[date] = { Früh: null, Mittag: null, Abend: null, Schlaf: null, Zwischen: [] };
-
-        const type = parts[1].toLowerCase();
-        const value = parseInt(parts[2]);
-
-        if (type.startsWith("früh")) data[date].Früh = value;
-        else if (type.startsWith("mittag")) data[date].Mittag = value;
-        else if (type.startsWith("abend")) data[date].Abend = value;
-        else if (type.startsWith("schlaf")) data[date].Schlaf = value;
-        else if (type.startsWith("zwischen")) data[date].Zwischen.push(value);
+        const m = line.match(/(Frühstück|Mittagessen|Abendessen|Schlafen|Zwischenmessung).*?(\d+)\s*$/);
+        if (m && currentDate) {
+            entries.push({
+                date: currentDate,
+                type: m[1],
+                value: parseInt(m[2])
+            });
+        }
     }
-
-    return data;
+    return entries;
 }
 
 /* ---------------------------------------------------------
-   MONATS & WOCHEN LOGIK
---------------------------------------------------------- */
-
-function groupByMonth(data) {
-    const months = {};
-
-    for (const date in data) {
-        const [d, m, y] = date.split(".");
-        const key = `${m}.${y}`; 
-
-        if (!months[key]) months[key] = {};
-        months[key][date] = data[date];
+   Gruppiert Einträge nach Monat → { "2025-10": [..] }
+------------------------------------------------------------*/
+function groupByMonth(entries) {
+    const map = {};
+    for (let e of entries) {
+        const [d,m,y] = e.date.split(".");
+        const key = `${y}-${m}`;
+        if (!map[key]) map[key] = [];
+        map[key].push(e);
     }
-
-    return months;
-}
-
-function weekOfMonth(date) {
-    const [day, month, year] = date.split(".").map(Number);
-    const dt = new Date(year, month - 1, day);
-    const week = Math.ceil((dt.getDate() + 6 - dt.getDay()) / 7);
-    return week;
+    return map;
 }
 
 /* ---------------------------------------------------------
-   DIAGRAMM GENERIERUNG
---------------------------------------------------------- */
-
-function makeChart(ctx, dayData, wAvg, mAvg) {
-    return new Chart(ctx, {
-        type: "bar",
-        data: {
-            labels: ["Früh", "Mittag", "Abend", "Schlaf"],
-            datasets: [
-                {
-                    label: "Werte",
-                    data: [dayData.Früh, dayData.Mittag, dayData.Abend, dayData.Schlaf],
-                    backgroundColor: "rgba(100,150,255,0.7)",
-                    borderColor: "white",
-                    borderWidth: 1,
-                    barThickness: 25
-                },
-                {
-                    label: "Tagesschnitt",
-                    data: [dayData.avg, dayData.avg, dayData.avg, dayData.avg],
-                    type: "line",
-                    borderColor: "yellow",
-                    borderWidth: 2
-                },
-                {
-                    label: "Wochenschnitt",
-                    data: [wAvg, wAvg, wAvg, wAvg],
-                    type: "line",
-                    borderColor: "orange",
-                    borderWidth: 2
-                },
-                {
-                    label: "Monatsschnitt",
-                    data: [mAvg, mAvg, mAvg, mAvg],
-                    type: "line",
-                    borderColor: "cyan",
-                    borderWidth: 2
-                }
-            ]
-        },
-        options: {
-            responsive: true,
-            scales: {
-                y: {
-                    beginAtZero: false,
-                    grid: { color: "rgba(255,255,255,0.15)" }
-                },
-                x: {
-                    grid: { color: "rgba(255,255,255,0.08)" }
-                }
-            }
-        }
-    });
+   Durchschnitt berechnen
+------------------------------------------------------------*/
+function avg(array) {
+    if (!array.length) return 0;
+    return array.reduce((a,b)=>a+b,0) / array.length;
 }
 
 /* ---------------------------------------------------------
-   SEITEN GENERIERUNG
---------------------------------------------------------- */
+   Zeichnet ein Diagramm auf Canvas
+------------------------------------------------------------*/
+function drawChart(canvas, monthEntries, title) {
+    const ctx = canvas.getContext("2d");
+    const W = canvas.width;
+    const H = canvas.height;
 
-function buildPages() {
-    const parsed = parseData(rawText);
-    const months = groupByMonth(parsed);
+    ctx.fillStyle = "#222";
+    ctx.fillRect(0,0,W,H);
 
-    const container = document.getElementById("content");
-
-    for (const month in months) {
-        const monthPage = document.createElement("div");
-        monthPage.className = "month-page";
-
-        monthPage.innerHTML += `<h2>Monat: ${month}</h2>
-            <div class='legend'>
-                <b>Gelb:</b> Tagesschnitt &nbsp;&nbsp;
-                <b>Orange:</b> Wochenschnitt &nbsp;&nbsp;
-                <b>Cyan:</b> Monatsschnitt
-            </div>`;
-
-        const dates = Object.keys(months[month]).sort();
-
-        // Monatsschnitt berechnen
-        const allValues = [];
-        for (const d of dates) {
-            const v = months[month][d];
-            const vals = [v.Früh, v.Mittag, v.Abend, v.Schlaf].filter(x => x);
-            allValues.push(...vals);
-        }
-        const monthAvg = Math.round(allValues.reduce((a,b)=>a+b,0) / allValues.length);
-
-        const weeks = {};
-
-        for (const d of dates) {
-            const w = weekOfMonth(d);
-            if (!weeks[w]) weeks[w] = [];
-            weeks[w].push(d);
-        }
-
-        for (const w in weeks) {
-            const weekBlock = document.createElement("div");
-            weekBlock.className = "week-block";
-
-            weekBlock.innerHTML += `<div class='week-title'>Woche ${w}</div>`;
-
-            const weekDates = weeks[w];
-
-            // Wochenschnitt
-            const wvals = [];
-            for (const d of weekDates) {
-                const v = months[month][d];
-                wvals.push(...[v.Früh, v.Mittag, v.Abend, v.Schlaf].filter(x=>x));
-            }
-            const weekAvg = Math.round(wvals.reduce((a,b)=>a+b,0) / wvals.length);
-
-            for (const d of weekDates) {
-                const dayset = months[month][d];
-                const values = [dayset.Früh, dayset.Mittag, dayset.Abend, dayset.Schlaf].filter(x => x != null);
-                const avg = Math.round(values.reduce((a,b)=>a+b,0) / values.length);
-                dayset.avg = avg;
-
-                const chartDiv = document.createElement("div");
-                chartDiv.className = "chart-container";
-
-                chartDiv.innerHTML = `<h3>${d} (Ø ${avg})</h3>
-                    <canvas></canvas>`;
-
-                weekBlock.appendChild(chartDiv);
-
-                const ctx = chartDiv.querySelector("canvas").getContext("2d");
-                makeChart(ctx, dayset, weekAvg, monthAvg);
-            }
-
-            monthPage.appendChild(weekBlock);
-        }
-
-        container.appendChild(monthPage);
+    // Orientierungslinien
+    ctx.strokeStyle = "rgba(255,255,255,0.15)";
+    ctx.lineWidth = 1;
+    for (let i = 0; i < 6; i++) {
+        let y = 50 + i * ((H-120)/5);
+        ctx.beginPath();
+        ctx.moveTo(60, y);
+        ctx.lineTo(W-30, y);
+        ctx.stroke();
     }
+
+    // Zahlen extrahieren (1 Woche = 7 Tage pro Zeile)
+    const days = monthEntries.map(e => e.date);
+    const uniqueDays = [...new Set(days)];
+
+    const barWidth = 18;
+    const barGap = 14;
+    const maxBarHeight = H - 160;
+
+    // Monatsschnitt
+    const monthAvg = avg(monthEntries.map(e => e.value));
+
+    // Wertebereich
+    const maxValue = Math.max(...monthEntries.map(e => e.value), 180);
+
+    // Balken zeichnen
+    let x = 70;
+    for (let day of uniqueDays) {
+        const dayEntries = monthEntries.filter(e => e.date === day);
+
+        // Wochentrenner
+        if (new Date(day.split(".").reverse().join("-")).getDay() === 1) {
+            ctx.strokeStyle = "rgba(255,255,255,0.25)";
+            ctx.beginPath();
+            ctx.moveTo(x, 40);
+            ctx.lineTo(x, H-60);
+            ctx.stroke();
+        }
+
+        for (let e of dayEntries) {
+            const h = (e.value / maxValue) * maxBarHeight;
+            ctx.fillStyle = "rgba(0,150,255,0.85)";
+            ctx.fillRect(x, (H-80)-h, barWidth, h);
+
+            // Wert über Balken
+            ctx.fillStyle = "#fff";
+            ctx.strokeStyle = "#000";
+            ctx.lineWidth = 3;
+            ctx.strokeText(String(e.value), x, (H-85)-h);
+            ctx.fillText(String(e.value), x, (H-85)-h);
+
+            x += barWidth + barGap;
+        }
+
+        // Datum unter Balken
+        ctx.save();
+        ctx.translate(x - (barGap+barWidth), H-45);
+        ctx.rotate(-Math.PI/2);
+        ctx.fillStyle = "#fff";
+        ctx.strokeStyle = "#000";
+        ctx.lineWidth = 2;
+        ctx.strokeText(day, 0, 0);
+        ctx.fillText(day, 0, 0);
+        ctx.restore();
+    }
+
+    // Monatsschnitt Linie
+    ctx.strokeStyle = "rgba(255, 200, 0, 0.9)";
+    ctx.lineWidth = 2;
+    let yAvg = (H-80) - (monthAvg/maxValue)*maxBarHeight;
+    ctx.beginPath();
+    ctx.moveTo(60, yAvg);
+    ctx.lineTo(W-30, yAvg);
+    ctx.stroke();
+
+    // Monatsschnitt Text
+    ctx.fillStyle = "#fff";
+    ctx.strokeStyle = "#000";
+    ctx.lineWidth = 2;
+    ctx.strokeText(`Monatsschnitt: ${monthAvg.toFixed(1)}`, 65, yAvg - 5);
+    ctx.fillText(`Monatsschnitt: ${monthAvg.toFixed(1)}`, 65, yAvg - 5);
+
+    // Titel
+    ctx.fillStyle = "#fff";
+    ctx.strokeStyle = "#000";
+    ctx.lineWidth = 3;
+    ctx.strokeText(title, 80, 30);
+    ctx.fillText(title, 80, 30);
 }
 
 /* ---------------------------------------------------------
-   PDF EXPORT
---------------------------------------------------------- */
+   Generiere Seiten
+------------------------------------------------------------*/
+function generate() {
+    const text = document.getElementById("input").value;
+    const entries = parseData(text);
+    const months = groupByMonth(entries);
 
-async function exportPDF() {
-    const { jsPDF } = window.jspdf;
-    const pdf = new jsPDF({ unit: "px", format: "a4" });
+    const out = document.getElementById("output");
+    out.innerHTML = "";
 
-    const pages = document.querySelectorAll(".month-page");
+    for (let month in months) {
+        let page = document.createElement("div");
+        page.className = "page";
 
-    for (let i = 0; i < pages.length; i++) {
-        if (i !== 0) pdf.addPage();
-        await pdf.html(pages[i], { x: 10, y: 10 });
+        let title = document.createElement("div");
+        title.className = "legend-box";
+        title.innerHTML = `<b>Monat: ${month}</b>`;
+        page.appendChild(title);
+
+        let canvas = document.createElement("canvas");
+        canvas.width = 1800;
+        canvas.height = 900;
+        page.appendChild(canvas);
+
+        drawChart(canvas, months[month], `Glukosewerte – ${month}`);
+
+        out.appendChild(page);
     }
-
-    // PDF Name = erster + letzter Tag
-    const keys = Object.keys(parseData(rawText)).sort();
-    const name = `${keys[0]}_bis_${keys[keys.length - 1]}.pdf`;
-
-    pdf.save(name);
 }
-
-buildPages();
 </script>
 
 </body>
