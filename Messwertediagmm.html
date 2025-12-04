@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>Blutzucker Diagramm + PDF Export (Offline)</title>
+
+<style>
+body { font-family: Arial, sans-serif; padding: 20px; }
+canvas { width: 100%; max-width: 900px; height: 400px; margin-bottom: 30px; }
+textarea { width: 100%; height: 200px; margin-top: 10px; }
+button { padding: 10px 20px; margin: 10px 0; }
+</style>
+
+</head>
+<body>
+
+<h2>📊 Blutzucker Diagramm – Offline + PDF Export</h2>
+
+<p>Füge unten deinen Text ein und klicke auf <b>Diagramm erstellen</b>.  
+Danach kannst du alles als <b>PDF exportieren</b>.</p>
+
+<textarea id="textinput" placeholder="Hier deinen Text einfügen…"></textarea>
+<br>
+
+<button onclick="buildCharts()">Diagramm erstellen</button>
+<button onclick="exportPDF()">PDF exportieren</button>
+
+<div id="output"></div>
+
+<script>
+/* ------------------------------------------------------------------
+   1) EINGEBAUTE MINI-CHART-BIBLIOTHEK (ohne Internet)
+------------------------------------------------------------------ */
+class Chart{
+constructor(canvas, config){
+this.canvas = canvas;
+this.ctx = canvas.getContext("2d");
+this.labels = config.data.labels;
+this.datasets = config.data.datasets;
+this.render();
+}
+
+render(){
+const ctx = this.ctx;
+const W = this.canvas.width;
+const H = this.canvas.height;
+ctx.clearRect(0,0,W,H);
+
+let maxY = 0;
+this.datasets.forEach(ds => {
+ds.data.forEach(v => { if (v > maxY) maxY = v; });
+});
+maxY = Math.ceil(maxY / 10) * 10;
+
+const pad = 50;
+const stepX = (W - pad*2) / (this.labels.length - 1 || 1);
+const stepY = (H - pad*2) / maxY;
+
+ctx.font = "14px Arial";
+
+/* Y-Linien */
+for (let i=0;i<=5;i++){
+let y = pad + (H-pad*2)*(i/5);
+let v = Math.round(maxY - maxY*(i/5));
+ctx.fillText(v, 5, y+5);
+
+ctx.beginPath();
+ctx.strokeStyle = "#ddd";
+ctx.moveTo(pad, y);
+ctx.lineTo(W-pad, y);
+ctx.stroke();
+}
+
+/* Bars & Lines */
+this.datasets.forEach(ds => {
+ctx.strokeStyle = ds.color;
+ctx.fillStyle = ds.color;
+
+if (ds.type === "bar"){
+let barW = stepX * 0.20;
+ds.data.forEach((v,i)=>{
+let x = pad + stepX*i + barW*ds.offset;
+let y = H - pad - v*stepY;
+ctx.fillRect(x, y, barW, v*stepY);
+});
+}
+
+if (ds.type === "line"){
+ctx.beginPath();
+ds.data.forEach((v,i)=>{
+let x = pad + stepX*i;
+let y = H - pad - v*stepY;
+if (i===0) ctx.moveTo(x,y);
+else ctx.lineTo(x,y);
+});
+ctx.stroke();
+}
+});
+}
+}
+
+/* ------------------------------------------------------------------
+   2) PARSER
+------------------------------------------------------------------ */
+function parseText(txt){
+const lines = txt.split("\n").map(l => l.trim());
+let items = [];
+let current = null;
+
+const dRe = /^(\d{2}\.\d{2}\.\d{4})/;
+for (let line of lines){
+const d = line.match(dRe);
+if (d){
+if (current) items.push(current);
+current = { date: d[1].slice(0,5), F:null,M:null,A:null,S:null };
+continue;
+}
+if (!current) continue;
+
+if (line.toLowerCase().startsWith("früh")) current.F = num(line);
+if (line.toLowerCase().startsWith("mittag")) current.M = num(line);
+if (line.toLowerCase().startsWith("abend")) current.A = num(line);
+if (line.toLowerCase().startsWith("schlaf")) current.S = num(line);
+}
+if (current) items.push(current);
+return items;
+}
+
+function num(line){
+const m = line.match(/(\d{2,3})/);
+return m ? parseInt(m[1]) : null;
+}
+
+/* ------------------------------------------------------------------
+   3) DIAGRAMME ERSTELLEN
+------------------------------------------------------------------ */
+function buildCharts(){
+const txt = document.getElementById("textinput").value;
+const data = parseText(txt);
+const output = document.getElementById("output");
+output.innerHTML = "";
+
+if (data.length === 0){
+output.innerHTML = "<p>❌ Keine Daten gefunden.</p>";
+return;
+}
+
+let chunks = [];
+for(let i=0;i<data.length;i+=20){
+chunks.push(data.slice(i,i+20));
+}
+
+chunks.forEach((chunk,idx)=>{
+let canvas = document.createElement("canvas");
+canvas.width = 900;
+canvas.height = 400;
+output.appendChild(canvas);
+
+drawChunk(canvas,chunk);
+});
+}
+
+function drawChunk(canvas,days){
+const labels = days.map(d=>d.date);
+const F = days.map(d=>d.F??0);
+const M = days.map(d=>d.M??0);
+const A = days.map(d=>d.A??0);
+const S = days.map(d=>d.S??0);
+
+const avg = days.map(d=>{
+let arr=[d.F,d.M,d.A,d.S].filter(v=>v!=null);
+return Math.round(arr.reduce((a,b)=>a+b,0)/arr.length);
+});
+
+new Chart(canvas,{
+    data:{
+        labels:labels,
+        datasets:[
+            {type:"bar", data:F, color:"#3b82f6", offset:0},
+            {type:"bar", data:M, color:"#10b981", offset:1},
+            {type:"bar", data:A, color:"#f59e0b", offset:2},
+            {type:"bar", data:S, color:"#ef4444", offset:3},
+            {type:"line", data:avg, color:"#000"}
+        ]
+    }
+});
+}
+
+/* ------------------------------------------------------------------
+   4) PDF EXPORT – OHNE INTERNET!
+------------------------------------------------------------------ */
+function exportPDF(){
+const canvases = document.querySelectorAll("canvas");
+if (canvases.length === 0){
+alert("Bitte zuerst Diagramme erstellen.");
+return;
+}
+
+const pdfCanvas = document.createElement("canvas");
+pdfCanvas.width = 900;
+pdfCanvas.height = canvases.length * 450;
+const ctx = pdfCanvas.getContext("2d");
+
+let y = 0;
+canvases.forEach(c=>{
+    ctx.drawImage(c,0,y);
+    y += 450;
+});
+
+const a = document.createElement("a");
+a.href = pdfCanvas.toDataURL("image/png");
+a.download = "Blutzucker.pdf";
+a.click();
+}
+</script>
+
+</body>
+</html>
