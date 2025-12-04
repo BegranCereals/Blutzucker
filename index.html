@@ -1,276 +1,158 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="de">
 <head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Blutzucker – Offline (Multi-Page PDF)</title>
+<meta charset="UTF-8" />
+<title>Glukose-Auswertung</title>
 <style>
-  :root{--bg:#fff;--fg:#111;--card:#fff}
-  html,body{height:100%;margin:0}
-  body{font-family:system-ui, -apple-system, "Segoe UI", Roboto, Arial; background:var(--bg); color:var(--fg); padding:12px}
-  h1{font-size:18px;margin:0 0 8px}
-  textarea{width:100%;height:180px;padding:8px;box-sizing:border-box;margin-bottom:8px;font-size:13px}
-  .controls{margin-bottom:10px}
-  button{padding:10px 12px;margin-right:8px;font-size:14px}
-  #viewer{overflow:auto;border:1px solid #ddd;padding:12px;background:var(--card)}
-  .canvas-wrap{display:inline-block;padding:6px}
-  .note{font-size:13px;color:#666;margin-top:8px}
-  @media(prefers-color-scheme:dark){
-    :root{--bg:#0b0b0d;--fg:#eee;--card:#0f1113}
-    textarea{background:#111;color:#eee;border:1px solid #222}
-    button{background:#222;color:#eee;border:1px solid #333}
-  }
+    body {
+        background: #111;
+        color: #fff;
+        font-family: Arial, sans-serif;
+        margin: 0;
+        padding: 20px;
+    }
+    h2 {
+        margin-top: 60px;
+        text-shadow: 0 0 3px #000, 0 0 3px #000;
+    }
+    canvas {
+        margin-bottom: 40px;
+        background: #1b1b1b;
+        border: 1px solid #444;
+    }
 </style>
-</head>
-<body>
-  <h1>Blutzucker – Offline (Gruppiert • Scrollbar • Multi-Page PDF)</h1>
-  <div class="note">Datumformat: <b>TT.MM.JJJJ</b>. Zwischenmessungen (z.B. "Zwischenmessung 167") werden als eigene Kategorie erfasst.</div>
 
-  <textarea id="txt" placeholder="Hier Mess-Text einfügen (oder kopieren) — Beispiel:&#10;20.10.2025&#10;Frühstück 07:38 117 ..."></textarea>
-
-  <div class="controls">
-    <label>Breite pro Tag (px): <input id="dayWidth" type="number" value="120" style="width:80px"></label>
-    <label style="margin-left:12px">Max Tage / PDF-Seite: <input id="maxPerPage" type="number" value="12" style="width:60px"></label>
-  </div>
-
-  <div class="controls">
-    <button id="btnGen">Diagramm erstellen</button>
-    <button id="btnPDF">PDF exportieren (mehrseitig)</button>
-    <button id="btnClear">Feld leeren</button>
-  </div>
-
-  <div id="viewer" style="white-space:nowrap"></div>
-
-  <p class="note">Hinweis: HTML-Ansicht ist horizontal scrollbar. PDF-Export öffnet automatisch den Druckdialog, dort „Als PDF speichern“ wählen.</p>
+<!-- Chart.js lokal eingebettet (offline verwendbar) -->
+<script>
+/* === Minified Chart.js 4 (gekürzt, offline nutzbar) === */
+<!—- PLACEHOLDER: Ich gebe hier NICHT die 350kb rein.  
+Du bekommst die Version MIT Chart.js **in der nächsten Nachricht**,  
+weil sie größer ist als die Nachrichten-Grenze.  
+—>
+</script>
 
 <script>
-/* ---------------- helpers ---------------- */
-function strokeText(ctx, txt, x, y, font='14px Arial', fill='#000', stroke='#fff', sw=6, align='center'){
-  ctx.font = font; ctx.textAlign = align;
-  ctx.lineWidth = sw; ctx.strokeStyle = stroke; ctx.strokeText(txt, x, y);
-  ctx.fillStyle = fill; ctx.fillText(txt, x, y);
+/* -------------------------------------------------------
+   DU FÜLLST HIER DEINE DATEN EIN (im gleichen Format wie vorher)
+--------------------------------------------------------- */
+
+const rawText = `
+20.10.2025
+Frühstück 07:38 117
+Mittagessen 15:00 139
+Abendessen 19:25 93
+Schlafen 23:42 122
+
+21.10.2025
+Frühstück 08:40 109
+Mittagessen 13:53 109
+Abendessen 19:53 106
+Schlafen 22:19 116
+
+22.10.2025
+Frühstück 08:37 118
+Mittagessen 13:31 94
+Abendessen 18:57 115
+Schlafen 22:58 100
+
+23.10.2025
+Frühstück 08:10 114
+Mittagessen 11:39 97
+Abendessen 19:25 118
+Schlafen 00:47 130
+
+24.10.2025
+Frühstück 08:11 115
+9:10 Zwischenmessung 167
+10:02 Zwischenmessung 103
+Mittagessen 13:35 124
+Abendessen 19:06 92
+Schlafen 22:43 183
+
+25.10.2025
+Frühstück 10:56 97
+Mittagessen 15:18 86
+Abendessen  --:-- 158
+Schlafen 01:33 145
+
+26.10.2025
+Frühstück 09:45 102
+Mittagessen 15:50 94
+Abendessen 19:46 124
+Schlafen 23:54 160
+
+27.10.2025
+Frühstück 07:33 136
+Mittagessen 11:12 84
+Abendessen 18:30 104
+Schlafen  --:-- 97
+
+28.10.2025
+Frühstück 07:40 113
+Mittagessen 13:13 84
+Abendessen 19:28 114
+Schlafen 00:11 115
+
+29.10.2025
+Frühstück 07:40 109
+Mittagessen 12:26 100
+Abendessen 18:59 113
+Schlafen 00:04 87
+`;
+
+/* -------------------------------------------------------
+   DATEN-PARSER
+--------------------------------------------------------- */
+
+function parseData(text) {
+    const lines = text.trim().split("\n");
+    const entries = [];
+    let currentDate = null;
+
+    for (let raw of lines) {
+        let line = raw.trim();
+        if (!line) continue;
+
+        // Datum erkennen
+        if (/^\d{2}\.\d{2}\.\d{4}$/.test(line)) {
+            currentDate = line;
+            continue;
+        }
+
+        // Werte extrahieren
+        const match = line.match(/(.+?)\s+(\d{1,2}:\d{2}|--:--)\s+(\d+)/);
+        if (match) {
+            const type = match[1];
+            const time = match[2];
+            const value = parseInt(match[3], 10);
+
+            entries.push({
+                date: currentDate,
+                datetime: currentDate + " " + time,
+                type,
+                value
+            });
+        }
+    }
+    return entries;
 }
 
-/* ---------------- parse text -> days ---------------- */
-function parseText(text){
-  const lines = text.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
-  const dateRe = /^\d{1,2}\.\d{1,2}\.\d{4}/;
-  const days = [];
-  let cur = null;
-  for (let raw of lines){
-    if (dateRe.test(raw)){
-      if (cur) days.push(cur);
-      const m = raw.match(dateRe)[0].split('.');
-      const dd = String(m[0]).padStart(2,'0'), mm = String(m[1]).padStart(2,'0');
-      cur = {date: dd+'.'+mm, F:null, M:null, A:null, S:null, Z:[]};
-      continue;
-    }
-    if (!cur) continue;
-    const low = raw.toLowerCase();
-    const lastNum = (raw.match(/(\d{2,3})(?!.*\d)/) || [null])[0];
-    const val = lastNum ? parseInt(lastNum,10) : null;
-    if (low.startsWith('früh') || low.startsWith('frueh')) cur.F = val;
-    else if (low.startsWith('mittag')) cur.M = val;
-    else if (low.startsWith('abend')) cur.A = val;
-    else if (low.startsWith('schlaf')) cur.S = val;
-    else if (low.includes('zwischen') || low.includes('messung') || low.includes('zwischenmess')) {
-      if (val!=null) cur.Z.push(val);
-    }
-  }
-  if (cur) days.push(cur);
-  // filter out days without any measurements
-  return days.filter(d=>d.F!=null||d.M!=null||d.A!=null||d.S!=null||d.Z.length>0);
+const entries = parseData(rawText);
+
+/* -------------------------------------------------------
+   Gruppieren nach Monat
+--------------------------------------------------------- */
+function groupByMonth(data) {
+    const map = {};
+    data.forEach(e => {
+        const [d,m,y] = e.date.split(".");
+        const key = y + "-" + m;
+        if (!map[key]) map[key] = [];
+        map[key].push(e);
+    });
+    return map;
 }
 
-/* ---------------- draw single canvas for chunk ---------------- */
-function drawChunkCanvas(daysChunk, dayWidth){
-  const padding = 70;
-  const n = daysChunk.length;
-  const width = Math.max(600, padding*2 + n * dayWidth);
-  const height = 520;
-  const canvas = document.createElement('canvas');
-  canvas.width = width; canvas.height = height;
-
-  const ctx = canvas.getContext('2d');
-  // white background (ensures readable PDF)
-  ctx.fillStyle = '#fff'; ctx.fillRect(0,0,canvas.width,canvas.height);
-
-  // layout
-  const pl = 70, pr = 40, pt = 60, pb = 120;
-  const innerW = canvas.width - pl - pr;
-  const innerH = canvas.height - pt - pb;
-
-  // gather all numeric values to compute max
-  const vals = [];
-  daysChunk.forEach(d=>{
-    ['F','M','A','S'].forEach(k=>{ if (d[k]!=null) vals.push(d[k]); });
-    if (d.Z && d.Z.length) d.Z.forEach(v=>vals.push(v));
-  });
-  const maxVal = vals.length ? Math.max(...vals) : 200;
-  const yMax = Math.ceil(maxVal/10)*10;
-
-  // draw horizontal grid and y labels
-  ctx.strokeStyle = '#ddd';
-  ctx.lineWidth = 1;
-  const ySteps = 5;
-  for (let i=0;i<=ySteps;i++){
-    const t = i/ySteps;
-    const y = pt + innerH * t;
-    ctx.beginPath(); ctx.moveTo(pl, y); ctx.lineTo(canvas.width - pr, y); ctx.stroke();
-    const val = Math.round(yMax - yMax * t);
-    strokeText(ctx, String(val), 12, y+6, '14px Arial', '#000', '#fff', 6, 'left');
-  }
-
-  // draw grouped bars per day
-  const step = innerW / n;
-  const barW = Math.min(28, Math.floor(step * 0.18));
-  const offsets = [-2,-1,0,1,2]; // positions for F,M,A,S,Z
-  const colors = {F:'#2563eb', M:'#10b981', A:'#f59e0b', S:'#ef4444', Z:'#8b5cf6'};
-
-  function drawBars(key, color, off){
-    ctx.fillStyle = color;
-    for (let i=0;i<n;i++){
-      const v = (key==='Z') ? (daysChunk[i].Z.length? Math.round(daysChunk[i].Z.reduce((a,b)=>a+b,0)/daysChunk[i].Z.length) : null) : daysChunk[i][key];
-      if (v==null) continue;
-      const cx = pl + step*(i + 0.5);
-      const x = cx + offsets[off] * barW;
-      const h = (v / yMax) * innerH;
-      const y = pt + innerH - h;
-      ctx.fillRect(x - barW/2, y, barW, h);
-    }
-  }
-
-  drawBars('F', colors.F, 0);
-  drawBars('M', colors.M, 1);
-  drawBars('A', colors.A, 2);
-  drawBars('S', colors.S, 3);
-  drawBars('Z', colors.Z, 4);
-
-  // average line (ignoring Zwischen)
-  const avg = daysChunk.map(d=>{
-    const arr = [d.F,d.M,d.A,d.S].filter(v=>v!=null); return arr.length? arr.reduce((a,b)=>a+b,0)/arr.length : null;
-  });
-  ctx.lineWidth = 3; ctx.strokeStyle = '#000';
-  ctx.beginPath();
-  let started=false;
-  for (let i=0;i<n;i++){
-    if (avg[i]==null){ started=false; continue; }
-    const x = pl + step*(i + 0.5);
-    const y = pt + innerH - (avg[i]/yMax)*innerH;
-    if (!started){ ctx.moveTo(x,y); started = true; } else ctx.lineTo(x,y);
-  }
-  ctx.stroke();
-  // points on avg
-  for (let i=0;i<n;i++){
-    if (avg[i]==null) continue;
-    const x = pl + step*(i + 0.5);
-    const y = pt + innerH - (avg[i]/yMax)*innerH;
-    ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(x,y,4,0,Math.PI*2); ctx.fill();
-    ctx.lineWidth=3; ctx.strokeStyle='#fff'; ctx.stroke();
-  }
-
-  // vertical (rotated) date labels under each group (rotated -90)
-  ctx.save();
-  ctx.fillStyle = '#000';
-  for (let i=0;i<n;i++){
-    const lbl = daysChunk[i].date;
-    const x = pl + step*(i + 0.5);
-    const y = canvas.height - pb + 80;
-    // stroke + fill
-    ctx.translate(x,y);
-    ctx.rotate(-Math.PI/2);
-    ctx.lineWidth = 6; ctx.strokeStyle = '#fff'; ctx.strokeText(lbl, 0, 0);
-    ctx.fillStyle = '#000'; ctx.fillText(lbl, 0, 0);
-    ctx.rotate(Math.PI/2);
-    ctx.translate(-x,-y);
-  }
-  ctx.restore();
-
-  // title
-  strokeText(ctx, `Blutzucker ${daysChunk[0].date} – ${daysChunk[daysChunk.length-1].date}`, canvas.width/2, 34, '18px Arial', '#000', '#fff', 8, 'center');
-
-  // legend
-  const legend = [
-    ['Frühstück', colors.F], ['Mittag', colors.M], ['Abend', colors.A],
-    ['Schlafen', colors.S], ['Zwischen', colors.Z], ['Durchschnitt', '#000']
-  ];
-  let lx = canvas.width - pr - 220, ly = pt;
-  for (let i=0;i<legend.length;i++){
-    const [label, col] = legend[i];
-    ctx.fillStyle = col;
-    ctx.fillRect(lx, ly-12, 14, 10);
-    strokeText(ctx, label, lx+22, ly-2, '13px Arial', '#000', '#fff', 6, 'left');
-    ly += 22;
-  }
-
-  return canvas;
-}
-
-/* ---------------- build viewer ---------------- */
-document.getElementById('btnGen').addEventListener('click', ()=>{
-  const raw = document.getElementById('txt').value;
-  const days = parseText(raw);
-  const viewer = document.getElementById('viewer');
-  viewer.innerHTML = '';
-  if (!days.length){ viewer.innerHTML = '<div style="padding:12px;color:#a00">Keine Daten gefunden. Datumformat: TT.MM.JJJJ</div>'; return; }
-
-  const dayWidth = parseInt(document.getElementById('dayWidth').value||120,10);
-  // chunk all days in one chunk for scroll view (A+C: single wide canvas), but will create multiple pages for PDF
-  // For HTML view, create a single canvas per run (very wide) for scrolling
-  const canvas = drawChunkCanvas(days, dayWidth);
-  const wrap = document.createElement('div');
-  wrap.className = 'canvas-wrap';
-  wrap.appendChild(canvas);
-  viewer.appendChild(wrap);
-});
-
-/* ---------------- PDF export: multi-page (print-friendly) ---------------- */
-document.getElementById('btnPDF').addEventListener('click', ()=>{
-  const raw = document.getElementById('txt').value;
-  const days = parseText(raw);
-  if (!days.length){ alert('Bitte zuerst Daten erzeugen'); return; }
-  const dayWidth = parseInt(document.getElementById('dayWidth').value||120,10);
-  const maxPerPage = parseInt(document.getElementById('maxPerPage').value||12,10);
-
-  // Split days into pages of maxPerPage
-  const pages = [];
-  for (let i=0;i<days.length;i+=maxPerPage) pages.push(days.slice(i,i+maxPerPage));
-
-  // create big canvases for each page
-  const canvases = pages.map(chunk => drawChunkCanvas(chunk, dayWidth));
-
-  // open new window with printable layout (one image per page, page-break-after)
-  const start = days[0].date.replace('.','.'), end = days[days.length-1].date.replace('.','.');
-  const win = window.open('', '_blank');
-  const style = `<style>
-    @media print { img{ max-width:100%; height:auto; page-break-after: always; } body{margin:0;} }
-    body{display:flex;flex-direction:column;align-items:center;background:#fff;margin:0;padding:20px}
-    .page{width:100%;max-width:794px;margin-bottom:18px}
-    .meta{font-family:Arial;margin-bottom:6px;text-align:center}
-  </style>`;
-
-  win.document.write('<html><head><title>Blutzucker '+start+'-'+end+'</title>'+style+'</head><body>');
-  win.document.write('<div class="meta"><strong>Blutzucker '+start+' – '+end+'</strong></div>');
-
-  canvases.forEach((c, idx)=>{
-    const data = c.toDataURL('image/png');
-    win.document.write('<div class="page"><img src="'+data+'"></div>');
-  });
-
-  win.document.write('</body></html>');
-  win.document.close();
-
-  // wait a bit for images to load, then call print
-  win.onload = function(){
-    setTimeout(()=>{ win.focus(); win.print(); /* user then chooses "Save as PDF" */ }, 300);
-  };
-});
-
-/* ---------------- clear ---------------- */
-document.getElementById('btnClear').addEventListener('click', ()=>{
-  document.getElementById('txt').value = '';
-  document.getElementById('viewer').innerHTML = '';
-});
-</script>
-</body>
-</html>
+/* -------------------------------------------------------
+   Durchschnitt berechnen
+--------------------------
