@@ -4,17 +4,59 @@
 <meta charset="UTF-8">
 <title>Glukose Wochen/Monatsdiagramm</title>
 <style>
-body{font-family:Arial;margin:20px;background:#fafafa;}
-textarea{width:100%;height:180px;margin-bottom:15px;}
-button{padding:12px 20px;font-size:18px;margin:10px 0;}
-.page{page-break-after:always;background:white;padding:20px;border:1px solid #ccc;margin-top:30px;}
-.week-chart{margin-bottom:40px;}
-canvas{background:white;border:1px solid #ddd;}
-.day-label{font-size:13px;text-align:center;margin-top:4px;}
-.avg-month, .avg-week{margin-top:8px;font-size:16px;font-weight:bold;}
-.legend{display:flex;gap:15px;margin-bottom:20px;}
-.legend div{display:flex;align-items:center;gap:6px;}
-.box{width:14px;height:14px;}
+body {
+    font-family: Arial, sans-serif;
+    margin: 20px;
+    background: #fafafa;
+}
+textarea {
+    width: 100%;
+    height: 180px;
+    margin-bottom: 15px;
+}
+button {
+    padding: 12px 20px;
+    font-size: 18px;
+    margin: 10px 0;
+}
+.page {
+    page-break-after: always;
+    background: white;
+    padding: 20px;
+    border: 1px solid #ccc;
+    margin-top: 30px;
+}
+.week-chart {
+    margin-bottom: 40px;
+}
+canvas {
+    background: white;
+    border: 1px solid #ddd;
+}
+.day-label {
+    font-size: 13px;
+    text-align: center;
+    margin-top: 4px;
+}
+.avg-month, .avg-week {
+    margin-top: 8px;
+    font-size: 16px;
+    font-weight: bold;
+}
+.legend {
+    display: flex;
+    gap: 15px;
+    margin-bottom: 20px;
+}
+.legend div {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.box {
+    width: 14px;
+    height: 14px;
+}
 </style>
 </head>
 <body>
@@ -27,188 +69,198 @@ canvas{background:white;border:1px solid #ddd;}
 <div id="output"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 
 <script>
-const COLORS={
-  "FrÃ¼hstÃ¼ck":"#00aaff",
-  "Mittagessen":"#00cc44",
-  "Abendessen":"#ff9900",
-  "Schlafen":"#ff3333",
-  "Zwischenmessung":"#aa55ff"
+const COLORS = {
+  "Frühstück": "#00aaff",
+  "Mittagessen": "#00cc44",
+  "Abendessen": "#ff9900",
+  "Schlafen": "#ff3333",
+  "Zwischenmessung": "#aa55ff"
 };
 
-function parse(text){
-  const lines=text.split('\n').map(l=>l.trim());
-  let cur=null;
-  let out=[];
-  for(let l of lines){
-    if(/^[0-9]{1,2}\.[0-9]{1,2}\.[0-9]{4}$/.test(l)){
-      cur=l; continue;
+function parse(text) {
+    const lines = text.split('\n').map(l => l.trim());
+    let currentDate = null;
+    let out = [];
+
+    for (let l of lines) {
+        if (/^[0-9]{1,2}\.[0-9]{1,2}\.[0-9]{4}$/.test(l)) {
+            currentDate = l;
+            continue;
+        }
+
+        const match = l.match(/(Frühstück|Mittagessen|Abendessen|Schlafen|Zwischenmessung).*?(\d+)$/);
+        if (match && currentDate) {
+            out.push({
+                date: currentDate,
+                type: match[1],
+                value: parseInt(match[2]),
+                color: COLORS[match[1]]
+            });
+        }
     }
-    const m=l.match(/(FrÃ¼hstÃ¼ck|Mittagessen|Abendessen|Schlafen|Zwischenmessung).*?(\d+)$/);
-    if(m&&cur){
-      out.push({date:cur,type:m[1],value:parseInt(m[2]),color:COLORS[m[1]]});
-    }
-  }
-  return out.sort((a,b)=>toDate(a.date)-toDate(b.date));
+    return out.sort((a,b)=> toDate(a.date) - toDate(b.date));
 }
 
-function toDate(d){
-  let [T,M,J]=d.split('.');
-  return new Date(J,M-1,T);
+function toDate(d) {
+    let [T, M, J] = d.split('.');
+    return new Date(J, M-1, T);
 }
 
-function groupMonths(arr){
-  let map={};
-  arr.forEach(e=>{
-    let d=toDate(e.date);
-    let key=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,'0');
-    if(!map[key]) map[key]=[];
-    map[key].push(e);
-  });
-  return map;
+function groupMonths(arr) {
+    let map = {};
+    arr.forEach(e => {
+        let d = toDate(e.date);
+        let key = d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0");
+        if (!map[key]) map[key] = [];
+        map[key].push(e);
+    });
+    return map;
 }
 
-function avg(arr){
-  if(!arr.length) return 0;
-  return Math.round(arr.reduce((a,b)=>a+b,0)/arr.length);
+function avg(arr) {
+    if (!arr.length) return 0;
+    return Math.round(arr.reduce((a,b)=>a+b,0)/arr.length);
 }
 
-function generate(){
-  let inp=document.getElementById("input").value.trim();
-  let out=document.getElementById("output");
-  out.innerHTML="";
-  if(!inp) return;
+function generate() {
+    let inp = document.getElementById("input").value.trim();
+    let out = document.getElementById("output");
+    out.innerHTML = "";
+    if (!inp) return;
 
-  let entries=parse(inp);
-  let months=groupMonths(entries);
+    let entries = parse(inp);
+    let months = groupMonths(entries);
 
-  for(let mk in months){
-    let monthEntries=months[mk];
-    let first=toDate(monthEntries[0].date);
-    let monthName=first.toLocaleString("de-DE",{month:"long"});
+    for (let mk in months) {
+        let monthEntries = months[mk];
+        let first = toDate(monthEntries[0].date);
+        let monthName = first.toLocaleString("de-DE", { month: "long" });
 
-    let page=document.createElement("div");
-    page.className="page";
+        let page = document.createElement("div");
+        page.className = "page";
 
-    let h=document.createElement("h2");
-    h.textContent=monthName+" "+first.getFullYear();
-    page.appendChild(h);
+        let h = document.createElement("h2");
+        h.textContent = monthName + " " + first.getFullYear();
+        page.appendChild(h);
 
-    let legend=document.createElement("div");
-    legend.className="legend";
-    legend.innerHTML=`
-      <div><div class="box" style="background:#00aaff"></div> FrÃ¼hstÃ¼ck</div>
-      <div><div class="box" style="background:#00cc44"></div> Mittagessen</div>
-      <div><div class="box" style="background:#ff9900"></div> Abendessen</div>
-      <div><div class="box" style="background:#ff3333"></div> Schlafen</div>
-      <div><div class="box" style="background:#aa55ff"></div> Zwischenmessung</div>`;
-    page.appendChild(legend);
+        let legend = document.createElement("div");
+        legend.className = "legend";
+        legend.innerHTML = `
+          <div><div class="box" style="background:#00aaff"></div> Frühstück</div>
+          <div><div class="box" style="background:#00cc44"></div> Mittagessen</div>
+          <div><div class="box" style="background:#ff9900"></div> Abendessen</div>
+          <div><div class="box" style="background:#ff3333"></div> Schlafen</div>
+          <div><div class="box" style="background:#aa55ff"></div> Zwischenmessung</div>`;
+        page.appendChild(legend);
 
-    let d0=new Date(first.getFullYear(), first.getMonth(), 1);
-    let d1=new Date(first.getFullYear(), first.getMonth()+1, 0);
+        let d0 = new Date(first.getFullYear(), first.getMonth(), 1);
+        let d1 = new Date(first.getFullYear(), first.getMonth()+1, 0);
 
-    let weeks=[];
-    let cur=[];
-    let curWeek=Math.floor((d0 - new Date(d0.getFullYear(),0,1))/604800000);
+        let weeks = [];
+        let cur = [];
+        let curWeek = Math.floor((d0 - new Date(d0.getFullYear(),0,1)) / 604800000);
 
-    for(let d=new Date(d0); d<=d1; d.setDate(d.getDate()+1)){
-      let w=Math.floor((d - new Date(d.getFullYear(),0,1))/604800000);
-      if(w!==curWeek){
-        weeks.push(cur); cur=[];
-        curWeek=w;
-      }
-      cur.push(new Date(d));
-    }
-    if(cur.length) weeks.push(cur);
+        for (let d = new Date(d0); d <= d1; d.setDate(d.getDate()+1)) {
+            let w = Math.floor((d - new Date(d.getFullYear(),0,1)) / 604800000);
+            if (w !== curWeek) {
+                weeks.push(cur);
+                cur = [];
+                curWeek = w;
+            }
+            cur.push(new Date(d));
+        }
+        if (cur.length) weeks.push(cur);
 
-    let monthValues=monthEntries.map(e=>e.value);
-    let monthAvg=avg(monthValues);
+        let monthValues = monthEntries.map(e => e.value);
+        let monthAvg = avg(monthValues);
 
-    weeks.forEach((week,wi)=>{
-      let wrap=document.createElement("div");
-      wrap.className="week-chart";
+        weeks.forEach((week, wi) => {
+            let wrap = document.createElement("div");
+            wrap.className = "week-chart";
 
-      let canv=document.createElement("canvas");
-      canv.width=800;
-      canv.height=260;
-      let ctx=canv.getContext("2d");
+            let canv = document.createElement("canvas");
+            canv.width = 800;
+            canv.height = 260;
+            let ctx = canv.getContext("2d");
 
-      ctx.font="14px Arial";
+            ctx.font = "14px Arial";
 
-      let all=[];
-      week.forEach(d=>{
-        let ds=d.getDate()+"."+(d.getMonth()+1)+"."+d.getFullYear();
-        let vals=monthEntries.filter(e=>e.date===ds);
-        all.push({date:ds, day:d.getDate(), list:vals});
-      });
+            let all = [];
+            week.forEach(d => {
+                let ds = d.getDate()+"."+(d.getMonth()+1)+"."+d.getFullYear();
+                let vals = monthEntries.filter(e => e.date === ds);
+                all.push({date: ds, day: d.getDate(), list: vals});
+            });
 
-      let max = Math.max(160,...all.flatMap(d=>d.list.map(v=>v.value)));
+            let max = Math.max(160, ...all.flatMap(d => d.list.map(v => v.value)));
 
-      let dayW=100;
-      let baseY=230;
+            let dayW = 100;
+            let baseY = 230;
 
-      all.forEach((d,i)=>{
-        let x=40 + i*dayW;
-        d.list.forEach((e,bi)=>{
-          let h=(e.value/max)*180;
-          ctx.fillStyle=e.color;
-          let bx=x+bi*14;
-          ctx.fillRect(bx, baseY-h, 12, h);
-          ctx.save();
-          ctx.translate(bx+6, baseY-h-3);
-          ctx.rotate(-Math.PI/2);
-          ctx.fillStyle="black";
-          ctx.fillText(e.value, 0,0);
-          ctx.restore();
+            all.forEach((d, i) => {
+                let x = 40 + i * dayW;
+                d.list.forEach((e, bi) => {
+                    let h = (e.value / max) * 180;
+                    ctx.fillStyle = e.color;
+                    let bx = x + bi*14;
+                    ctx.fillRect(bx, baseY - h, 12, h);
+
+                    ctx.save();
+                    ctx.translate(bx+6, baseY-h-3);
+                    ctx.rotate(-Math.PI/2);
+                    ctx.fillStyle = "black";
+                    ctx.fillText(e.value, 0, 0);
+                    ctx.restore();
+                });
+
+                let dayVals = d.list.map(v => v.value);
+                let dayAvg = dayVals.length ? avg(dayVals) : "";
+                ctx.fillStyle = "black";
+                ctx.fillText(dayAvg, x+20, 20);
+
+                ctx.fillText(d.day, x+20, baseY+20);
+            });
+
+            let weekVals = all.flatMap(d => d.list.map(v => v.value));
+            let wavg = avg(weekVals);
+
+            let aw = document.createElement("div");
+            aw.className = "avg-week";
+            aw.textContent = "Wochendurchschnitt: " + wavg + " mg/dl";
+
+            wrap.appendChild(canv);
+            wrap.appendChild(aw);
+            page.appendChild(wrap);
         });
 
-        let dayVals=d.list.map(v=>v.value);
-        let dayAvg=dayVals.length?avg(dayVals):"";
-        ctx.fillStyle="black";
-        ctx.fillText(dayAvg, x+20, 20);
+        let am = document.createElement("div");
+        am.className = "avg-month";
+        am.textContent = "Monatsdurchschnitt: " + monthAvg + " mg/dl";
+        page.appendChild(am);
 
-        ctx.fillText(d.day, x+20, baseY+20);
-      });
-
-      let weekVals=all.flatMap(d=>d.list.map(v=>v.value));
-      let wavg=avg(weekVals);
-      let aw=document.createElement("div");
-      aw.className="avg-week";
-      aw.textContent="Wochendurchschnitt: "+wavg+" mg/dl";
-
-      wrap.appendChild(canv);
-      wrap.appendChild(aw);
-      page.appendChild(wrap);
-    });
-
-    let am=document.createElement("div");
-    am.className="avg-month";
-    am.textContent="Monatsdurchschnitt: "+monthAvg+" mg/dl";
-    page.appendChild(am);
-
-    out.appendChild(page);
-  }
+        out.appendChild(page);
+    }
 }
 
-function makePDF(){
-  const { jsPDF } = window.jspdf;
-  let pdf=new jsPDF('p','pt','a4');
-  let pages=document.querySelectorAll(".page");
+function makePDF() {
+    const { jsPDF } = window.jspdf;
+    let pdf = new jsPDF('p','pt','a4');
+    let pages = document.querySelectorAll(".page");
 
-  let done=0;
-  pages.forEach((pg,i)=>{
-    html2canvas(pg).then(c=>{
-      pdf.addImage(c.toDataURL("image/jpeg",1.0),'JPEG',0,0,595,842);
-      if(i<pages.length-1) pdf.addPage();
-      done++;
-      if(done===pages.length) pdf.save("Glukose.pdf");
+    let done = 0;
+    pages.forEach((pg,i) => {
+        html2canvas(pg).then(c => {
+            pdf.addImage(c.toDataURL("image/jpeg",1.0),'JPEG',0,0,595,842);
+            if(i < pages.length-1) pdf.addPage();
+            done++;
+            if(done === pages.length) pdf.save("Glukose.pdf");
+        });
     });
-  });
 }
 </script>
-
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 
 </body>
 </html>
