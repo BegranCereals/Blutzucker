@@ -1,482 +1,279 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="de">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Glukose Auswertung (offline – Upgrade)</title>
+<meta charset="UTF-8" />
+<title>Glukose Diagramm Generator</title>
 
 <style>
-  :root{
-    --bg: #0b0b0d;
-    --fg: #e9e9e9;
-    --card: #ffffff;
-    --cardfg: #000;
-    --stroke: rgba(255,255,255,0.85);
-
-    --cF:#00c8ff;
-    --cM:#30ff7a;
-    --cA:#ffb53a;
-    --cS:#ff5252;
-    --cZ:#c07cff;
-
-    --grid: rgba(0,0,0,0.10);
-    --grid2: rgba(0,0,0,0.06);
-
-    --labelStrokeW: 0.7;
-  }
-
-  html,body{
-    margin:0;
-    padding:0;
-    background:var(--bg);
-    color:var(--fg);
-    font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial;
-  }
-
-  body{ padding:16px; }
-
-  h1{
-    margin:0 0 12px 0;
-    font-size:20px;
-    font-weight:700;
-  }
-
-  .note{
-    color:#ccc;
-    font-size:13px;
-    margin-bottom:12px;
-  }
-
-  textarea{
-    width:100%;
-    height:220px;
-    box-sizing:border-box;
-    padding:10px;
-    background:#111317;
-    color:var(--fg);
-    border-radius:8px;
-    border:1px solid #333;
-    font-size:14px;
-    resize:vertical;
-  }
-
-  .controls{
-    margin:10px 0 20px 0;
-    display:flex;
-    flex-wrap:wrap;
-    gap:10px;
-  }
-
-  .controls input{
-    background:#111317;
-    border:1px solid #444;
-    border-radius:6px;
-    color:var(--fg);
-    padding:6px;
-  }
-
-  button{
-    background:#22262a;
-    border:1px solid #444;
-    padding:10px 14px;
-    border-radius:8px;
-    color:var(--fg);
-    cursor:pointer;
-    font-size:14px;
-  }
-
-  button:hover{
-    background:#2c3136;
-  }
-
-  /* Seitenbuilder */
-  #pages{
-    margin-top:16px;
-  }
-
-  .monthPage{
-    background:var(--card);
-    color:var(--cardfg);
-    padding:16px;
-    margin:22px auto;
-    border-radius:10px;
-    max-width:850px;
-    box-shadow:0 12px 30px rgba(0,0,0,0.35);
-  }
-
-  .monthHeader{
-    display:flex;
-    justify-content:space-between;
-    align-items:center;
-    flex-wrap:wrap;
-    margin-bottom:8px;
-  }
-
-  .monthTitle{
-    font-size:20px;
-    font-weight:700;
-    margin-bottom:6px;
-  }
-
-  .legend{
-    display:flex;
-    flex-wrap:wrap;
-    gap:10px;
-    font-size:13px;
-  }
-
-  .legendItem{
-    display:flex;
-    align-items:center;
-    gap:6px;
-  }
-  .legendColor{
-    width:18px;
-    height:12px;
-    border-radius:3px;
-  }
-
-  .weekTitle{
-    margin:22px 0 6px 0;
-    font-weight:700;
-    font-size:15px;
-  }
-
-  .meta{
-    font-size:14px;
-    color:#333;
-    margin:8px 0;
-  }
-
-  @media (prefers-color-scheme:dark){
-    .monthPage{
-      background:#111417;
-      color:#eee;
+    body {
+        font-family: Arial, sans-serif;
+        background: #f5f5f5;
+        color: #111;
+        padding: 20px;
     }
-    .meta{ color:#bbb; }
-  }
+
+    h1 {
+        text-align: center;
+        font-size: 32px;
+    }
+
+    textarea {
+        width: 100%;
+        height: 220px;
+        font-size: 14px;
+        background: #fff;
+        color: #000;
+        border: 1px solid #999;
+        padding: 10px;
+    }
+
+    button {
+        padding: 12px;
+        margin-top: 10px;
+        background: #4CAF50;
+        border: none;
+        color: white;
+        font-size: 16px;
+        cursor: pointer;
+        width: 100%;
+    }
+
+    button:hover {
+        background: #45A049;
+    }
+
+    canvas {
+        margin-top: 20px;
+        width: 100%;
+        border: 1px solid #ccc;
+        background: #ffffff;
+    }
+
+    .page {
+        page-break-after: always;
+        margin-bottom: 50px;
+    }
+
+    .legend {
+        padding: 12px;
+        background: #fff;
+        border: 1px solid #ccc;
+        margin-bottom: 15px;
+        display: flex;
+        gap: 20px;
+        font-size: 14px;
+    }
+
+    .legend div {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .box {
+        width: 16px;
+        height: 16px;
+    }
+
 </style>
 </head>
 <body>
 
-<h1>Glukose-Auswertung (Monatsseiten • Wochenansicht)</h1>
-<div class="note">
-    Format: <b>TT.MM.JJJJ</b>. Zwischenmessungen werden automatisch erkannt.
-</div>
+<h1>Glukose Diagramm Generator</h1>
 
-<textarea id="input" placeholder="Füge deine Messdaten hier ein..."></textarea>
+<p>Daten einfügen:</p>
+<textarea id="input"></textarea>
+<button onclick="generate()">Diagramme erzeugen</button>
 
-<div class="controls">
-  <label>Breite pro Tag (px):
-    <input id="dayWidth" type="number" value="110" />
-  </label>
+<div id="output"></div>
 
-  <button id="btnGen">Diagramm erstellen</button>
-  <button id="btnPDF">PDF exportieren</button>
-  <button id="btnClear">Leeren</button>
-</div>
-
-<div id="pages"></div>
 <script>
-// ============= Hilfsfunktionen =============
-function parseDateDMY(s){
-  const p = s.split('.');
-  return new Date(+p[2], p[1]-1, +p[0]);
-}
-function isoWeekInfo(date){
-  const t = new Date(Date.UTC(date.getFullYear(),date.getMonth(),date.getDate()));
-  t.setUTCDate(t.getUTCDate() + 4 - (t.getUTCDay()||7));
-  const yStart = new Date(Date.UTC(t.getUTCFullYear(),0,1));
-  const week = Math.ceil((((t - yStart)/86400000)+1)/7);
-  return {year:t.getUTCFullYear(), week:week};
-}
-function textStroke(ctx,str,x,y){
-  ctx.lineWidth = 0.7;
-  ctx.strokeStyle = "rgba(255,255,255,0.9)";
-  ctx.strokeText(str,x,y);
-  ctx.fillStyle = "#000";
-  ctx.fillText(str,x,y);
-}
+/* ---------------------------------------------------------
+   DATEN PARSEN
+------------------------------------------------------------*/
 
-// ============= DATEN PARSER =============
-function parseTextToDays(text){
-  const lines = text.split(/\r?\n/).map(l=>l.trim());
-  const dateRe = /^\d{1,2}\.\d{1,2}\.\d{4}$/;
+function parseData(text) {
+    const lines = text.split("\n").map(l => l.trim());
+    const entries = [];
+    let currentDate = null;
 
-  const days=[];
-  let cur=null;
+    const typeColors = {
+        "Frühstück": "#00aaff",
+        "Mittagessen": "#00cc44",
+        "Abendessen": "#ff9900",
+        "Schlafen": "#ff3333",
+        "Zwischenmessung": "#aa55ff"
+    };
 
-  for(let line of lines){
-    if(!line) continue;
-
-    if(dateRe.test(line)){
-      if(cur) days.push(cur);
-      cur = {dateStr:line, dateObj:parseDateDMY(line), F:null,M:null,A:null,S:null,Z:[]};
-      continue;
-    }
-
-    if(!cur) continue;
-
-    const lo=line.toLowerCase();
-    const m=line.match(/(\d{2,3})/);
-    const v=m? +m[1] : null;
-
-    if(lo.startsWith("früh")||lo.startsWith("frueh")) cur.F=v;
-    else if(lo.startsWith("mittag")) cur.M=v;
-    else if(lo.startsWith("abend")) cur.A=v;
-    else if(lo.startsWith("schlaf")) cur.S=v;
-    else if(lo.includes("zwischen")){ if(v!=null) cur.Z.push(v); }
-  }
-
-  if(cur) days.push(cur);
-  return days;
-}
-
-// ============= Gruppieren nach Monat + Woche =============
-function groupByMonth(days){
-  const m={};
-  days.forEach(d=>{
-    const k = `${d.dateObj.getFullYear()}-${String(d.dateObj.getMonth()+1).padStart(2,'0')}`;
-    if(!m[k]) m[k]=[];
-    m[k].push(d);
-  });
-  Object.keys(m).forEach(k => m[k].sort((a,b)=>a.dateObj - b.dateObj));
-  return m;
-}
-
-function groupWeeks(days){
-  const m={};
-  for(let d of days){
-    const info=isoWeekInfo(d.dateObj);
-    const k=`${info.year}-W${info.week}`;
-    if(!m[k]) m[k]={week:info.week,year:info.year,days:[]};
-    m[k].days.push(d);
-  }
-  return Object.values(m).sort((a,b)=>a.days[0].dateObj - b.days[0].dateObj);
-}
-
-// ============= CANVAS ZEICHNUNG =============
-function drawWeekCanvas(days,opts){
-  const dayWidth = opts.dayWidth || 110;
-  const scale=2;
-  const pad={l:60,r:40,t:45,b:110};
-
-  const widthCSS = pad.l + pad.r + days.length*dayWidth;
-  const heightCSS = 330;
-
-  const c=document.createElement("canvas");
-  c.width = widthCSS*scale;
-  c.height = heightCSS*scale;
-  c.style.width = widthCSS+"px";
-  c.style.height = heightCSS+"px";
-
-  const ctx=c.getContext("2d");
-  ctx.scale(scale,scale);
-
-  ctx.fillStyle="#fff";
-  ctx.fillRect(0,0,widthCSS,heightCSS);
-
-  const vals=[];
-  for(let d of days){
-    ["F","M","A","S"].forEach(k=>{ if(d[k]!=null) vals.push(d[k]); });
-    if(d.Z) d.Z.forEach(z=>vals.push(z));
-  }
-
-  const max = vals.length?Math.ceil(Math.max(...vals)/10)*10:200;
-  const ih = heightCSS-pad.t-pad.b;
-
-  // horizontale Linien
-  ctx.strokeStyle="rgba(0,0,0,0.10)";
-  ctx.lineWidth=1;
-  for(let i=0;i<=5;i++){
-    const y = pad.t + ih*(i/5);
-    ctx.beginPath();
-    ctx.moveTo(pad.l,y);
-    ctx.lineTo(widthCSS-pad.r,y);
-    ctx.stroke();
-    textStroke(ctx,String(max - max*(i/5)), pad.l-20, y+4);
-  }
-
-  // vertikale Linien
-  const step = (widthCSS-pad.l-pad.r)/days.length;
-  ctx.strokeStyle="rgba(0,0,0,0.05)";
-  for(let i=0;i<=days.length;i++){
-    const x = pad.l + step*i;
-    ctx.beginPath();
-    ctx.moveTo(x,pad.t);
-    ctx.lineTo(x,pad.t+ih);
-    ctx.stroke();
-  }
-
-  // Balken
-  const barW = Math.min(20, step*0.18);
-  const keys=["F","M","A","S","Z"];
-  const off=[-2,-1,0,1,2];
-
-  const col = {
-    F:"var(--cF)", M:"var(--cM)", A:"var(--cA)",
-    S:"var(--cS)", Z:"var(--cZ)"
-  };
-
-  function drawR(x,y,w,h,color){
-    ctx.fillStyle=color;
-    ctx.beginPath();
-    ctx.moveTo(x,y);
-    ctx.lineTo(x+w,y);
-    ctx.lineTo(x+w,y+h);
-    ctx.lineTo(x,y+h);
-    ctx.closePath();
-    ctx.fill();
-  }
-
-  keys.forEach((k,ki)=>{
-    for(let i=0;i<days.length;i++){
-      let v=null;
-      if(k==="Z"){
-        if(days[i].Z.length){
-          v = Math.round(days[i].Z.reduce((a,b)=>a+b,0)/days[i].Z.length);
+    for (let line of lines) {
+        if (line.match(/^\d{1,2}\.\d{1,2}\.\d{4}$/)) {
+            currentDate = line;
+            continue;
         }
-      } else v=days[i][k];
-      if(v==null) continue;
 
-      const cx = pad.l + step*(i+0.5);
-      const x = cx + off[ki]*(barW+3);
-      const h = (v/max)*ih;
-      const y = pad.t + ih - h;
-
-      drawR(x-barW/2, y, barW, h, getComputedStyle(document.documentElement).getPropertyValue(col[k]));
-
-      textStroke(ctx,String(v), x, y-6);
+        const m = line.match(/(Frühstück|Mittagessen|Abendessen|Schlafen|Zwischenmessung).*?(\d+)\s*$/);
+        if (m && currentDate) {
+            entries.push({
+                date: currentDate,
+                type: m[1],
+                value: parseInt(m[2]),
+                color: typeColors[m[1]]
+            });
+        }
     }
-  });
-
-  // Tags
-  ctx.save();
-  ctx.font="13px Arial";
-  ctx.textAlign="center";
-
-  for(let i=0;i<days.length;i++){
-    const x = pad.l + step*(i+0.5);
-    const y = heightCSS - pad.b + 60;
-
-    ctx.translate(x,y);
-    ctx.rotate(-Math.PI/2);
-    textStroke(ctx, days[i].dateStr.slice(0,5), 0,0);
-    ctx.rotate(Math.PI/2);
-    ctx.translate(-x,-y);
-  }
-  ctx.restore();
-
-  return c;
+    return entries;
 }
 
-// ============= SEITEN GENERIEREN =============
-document.getElementById("btnGen").onclick = ()=>{
-  const raw = input.value.trim();
-  if(!raw){ alert("Bitte Text eingeben."); return; }
+/* ---------------------------------------------------------
+   NACH KALENDERWOCHE GRUPPIEREN
+------------------------------------------------------------*/
 
-  const days = parseTextToDays(raw).sort((a,b)=>a.dateObj - b.dateObj);
-  if(!days.length){ alert("Keine gültigen Daten."); return; }
+function dateToISO(d) {
+    const [day, month, year] = d.split(".");
+    return new Date(`${year}-${month}-${day}`);
+}
 
-  const months = groupByMonth(days);
-  const container = document.getElementById("pages");
-  container.innerHTML="";
+function getWeekNumber(date) {
+    const d = new Date(date.getTime());
+    d.setHours(0,0,0,0);
+    d.setDate(d.getDate() + 4 - (d.getDay() || 7));
+    const yearStart = new Date(d.getFullYear(), 0, 1);
+    return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+}
 
-  container.dataset.start = days[0].dateStr;
-  container.dataset.end   = days[days.length-1].dateStr;
+function groupByWeek(entries) {
+    const map = {};
 
-  for(const mKey of Object.keys(months).sort()){
-    const mdays = months[mKey];
-    const ws = groupWeeks(mdays);
+    for (let e of entries) {
+        const iso = dateToISO(e.date);
+        const year = iso.getFullYear();
+        const week = getWeekNumber(iso);
+        const key = `${year}-KW${week}`;
 
-    const div=document.createElement("div");
-    div.className="monthPage";
+        if (!map[key]) map[key] = [];
+        map[key].push(e);
+    }
 
-    // Header
-    const head=document.createElement("div");
-    head.className="monthHeader";
+    return map;
+}
 
-    const first=mdays[0].dateStr.slice(0,5);
-    const last =mdays[mdays.length-1].dateStr.slice(0,5);
+/* ---------------------------------------------------------
+   ZEICHNEN
+------------------------------------------------------------*/
 
-    const t=document.createElement("div");
-    t.className="monthTitle";
-    t.textContent=`Monat ${mKey} – ${first} bis ${last}`;
-    head.appendChild(t);
+function avg(arr) {
+    return arr.reduce((a,b)=>a+b,0) / arr.length;
+}
+
+function drawChart(canvas, weekData, title, startDate, endDate) {
+    const ctx = canvas.getContext("2d");
+    const W = canvas.width;
+    const H = canvas.height;
+
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(0,0,W,H);
+
+    const uniqueDays = [...new Set(weekData.map(e => e.date))];
+
+    const maxValue = Math.max(...weekData.map(e => e.value), 160);
+    const maxBarHeight = H - 140;
+
+    let x = 80;
+    const barWidth = 18;
+    const barGap = 10;
+
+    // Orientierungslinien
+    ctx.strokeStyle = "rgba(0,0,0,0.15)";
+    for (let i = 0; i < 6; i++) {
+        const y = 60 + i * ((H-140)/5);
+        ctx.beginPath();
+        ctx.moveTo(60, y);
+        ctx.lineTo(W - 40, y);
+        ctx.stroke();
+    }
+
+    // Titel
+    ctx.fillStyle = "#000";
+    ctx.font = "24px Arial";
+    ctx.fillText(title, 70, 40);
+
+    ctx.font = "14px Arial";
+
+    for (let day of uniqueDays) {
+        const dayEntries = weekData.filter(e => e.date === day);
+
+        // Datum unter Balken
+        ctx.save();
+        ctx.translate(x, H - 50);
+        ctx.rotate(-Math.PI/2);
+        ctx.fillStyle = "#000";
+        ctx.fillText(day, 0, 0);
+        ctx.restore();
+
+        for (let e of dayEntries) {
+            const h = (e.value / maxValue) * maxBarHeight;
+
+            ctx.fillStyle = e.color;
+            ctx.fillRect(x, (H - 80) - h, barWidth, h);
+
+            ctx.fillStyle = "#000";
+            ctx.fillText(e.value, x, (H - 85) - h);
+
+            x += barWidth + barGap;
+        }
+    }
+}
+
+/* ---------------------------------------------------------
+   GENERIEREN
+------------------------------------------------------------*/
+
+function generate() {
+    const text = document.getElementById("input").value;
+    if (!text.trim()) return;
+
+    const output = document.getElementById("output");
+    output.innerHTML = "";
+
+    const entries = parseData(text);
+    const weeks = groupByWeek(entries);
 
     // Legende
-    const leg=document.createElement("div");
-    leg.className="legend";
-    function L(lbl,c){
-      const e=document.createElement("div");
-      e.className="legendItem";
-      e.innerHTML=`<span class="legendColor" style="background:${c}"></span>${lbl}`;
-      leg.appendChild(e);
+    const legend = document.createElement("div");
+    legend.className = "legend";
+    legend.innerHTML = `
+        <div><div class="box" style="background:#00aaff"></div> Frühstück</div>
+        <div><div class="box" style="background:#00cc44"></div> Mittag</div>
+        <div><div class="box" style="background:#ff9900"></div> Abend</div>
+        <div><div class="box" style="background:#ff3333"></div> Schlafen</div>
+        <div><div class="box" style="background:#aa55ff"></div> Zwischen</div>
+    `;
+    output.appendChild(legend);
+
+    for (let week in weeks) {
+        const data = weeks[week];
+
+        const sorted = data.slice().sort((a,b)=>dateToISO(a.date)-dateToISO(b.date));
+        const start = sorted[0].date;
+        const end = sorted[sorted.length-1].date;
+
+        const page = document.createElement("div");
+        page.className = "page";
+
+        const header = document.createElement("h2");
+        header.textContent = `${week} – ${start} bis ${end}`;
+        page.appendChild(header);
+
+        const canvas = document.createElement("canvas");
+        canvas.width = 1800;
+        canvas.height = 900;
+
+        drawChart(canvas, sorted, week, start, end);
+        page.appendChild(canvas);
+
+        output.appendChild(page);
     }
-    L("Frühstück","var(--cF)");
-    L("Mittag","var(--cM)");
-    L("Abend","var(--cA)");
-    L("Schlafen","var(--cS)");
-    L("Zwischen","var(--cZ)");
-
-    head.appendChild(leg);
-    div.appendChild(head);
-
-    // Wochen
-    ws.forEach(w=>{
-      const dd = w.days.filter(d=> mdays.includes(d));
-      if(!dd.length) return;
-
-      const wk=document.createElement("div");
-      wk.className="weekTitle";
-      const m=dd[0].dateObj;
-      const so=dd[dd.length-1].dateObj;
-      wk.textContent = `KW ${w.week} – ${m.toLocaleDateString()} bis ${so.toLocaleDateString()}`;
-      div.appendChild(wk);
-
-      const canv = drawWeekCanvas(dd,{dayWidth:+dayWidth.value});
-      div.appendChild(canv);
-    });
-
-    container.appendChild(div);
-  }
-};
-
-// ============= PDF =============
-btnPDF.onclick = ()=>{
-  const pages=document.querySelectorAll(".monthPage");
-  if(!pages.length){ alert("Bitte zuerst Diagramme erstellen."); return; }
-
-  const s=pages[0].parentElement.dataset.start||"start";
-  const e=pages[0].parentElement.dataset.end||"end";
-
-  const win=window.open("");
-  win.document.write(`
-    <html><head><title>Glukose_${s}-${e}</title>
-    <style>
-      body{background:#fff;margin:0;padding:0;font-family:Arial;}
-      .page{width:800px;margin:20px auto;page-break-after:always}
-    </style>
-    </head><body>
-  `);
-
-  pages.forEach(pg=>{
-    const imgs=[...pg.querySelectorAll("canvas")].map(c=>c.toDataURL());
-    win.document.write(`<div class="page">`);
-    imgs.forEach(src=> win.document.write(`<img src="${src}" style="width:100%;margin-bottom:20px;" />`));
-    win.document.write(`</div>`);
-  });
-
-  win.document.write("</body></html>");
-  win.document.close();
-  setTimeout(()=>win.print(),300);
-};
-
-// ============= CLEAR =============
-btnClear.onclick = ()=>{
-  input.value="";
-  pages.innerHTML="";
-};
+}
 </script>
 </body>
 </html>
