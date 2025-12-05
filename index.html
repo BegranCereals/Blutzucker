@@ -3,401 +3,480 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Glukose Auswertung (offline)</title>
+<title>Glukose Auswertung (offline – Upgrade)</title>
+
 <style>
   :root{
-    --bg:#0b0b0d; --fg:#eee; --card:#fff; --cardfg:#000;
-    --cF:#00c8ff; --cM:#30ff7a; --cA:#ffb53a; --cS:#ff5252; --cZ:#c07cff;
-    --labelStroke: 0.8;
+    --bg: #0b0b0d;
+    --fg: #e9e9e9;
+    --card: #ffffff;
+    --cardfg: #000;
+    --stroke: rgba(255,255,255,0.85);
+
+    --cF:#00c8ff;
+    --cM:#30ff7a;
+    --cA:#ffb53a;
+    --cS:#ff5252;
+    --cZ:#c07cff;
+
+    --grid: rgba(0,0,0,0.10);
+    --grid2: rgba(0,0,0,0.06);
+
+    --labelStrokeW: 0.7;
   }
-  html,body{height:100%;margin:0;font-family:system-ui, -apple-system, "Segoe UI", Roboto, Arial}
-  body{background:var(--bg); color:var(--fg); padding:14px}
-  h1{margin:0 0 8px 0;font-size:18px}
-  .note{color:#aaa;font-size:13px;margin-bottom:10px}
-  textarea{width:100%;height:200px;padding:10px;box-sizing:border-box;border-radius:8px;border:1px solid #333;background:#0f1113;color:var(--fg);font-size:14px}
-  .controls{display:flex;gap:8px;align-items:center;margin:10px 0;flex-wrap:wrap}
-  .controls input{padding:6px;border-radius:6px;border:1px solid #333;background:#111;color:var(--fg)}
-  button{padding:9px 12px;border-radius:8px;border:1px solid #333;background:#222;color:var(--fg);cursor:pointer}
-  #pages{margin-top:16px}
-  .monthPage{background:var(--card);color:var(--cardfg);padding:12px;border-radius:10px;max-width:794px;margin:18px auto 28px auto;box-shadow:0 10px 24px rgba(0,0,0,0.35)}
-  .monthHeader{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
-  .monthTitle{font-weight:700;font-size:18px}
-  .legend{display:flex;gap:14px;flex-wrap:wrap;align-items:center;font-size:13px}
-  .legendItem{display:flex;gap:6px;align-items:center}
-  .legendColor{width:14px;height:10px;border-radius:3px;display:inline-block}
-  .weekBlock{margin:10px 0;padding:8px;border-radius:6px;border:1px solid #eee; background: #fafafa}
-  .weekTitle{font-weight:600;margin-bottom:8px}
-  .metaSmall{font-size:13px;color:#333;margin-top:6px}
-  canvas.weekCanvas{width:100%;display:block;border-radius:6px;border:1px solid #ddd}
+
+  html,body{
+    margin:0;
+    padding:0;
+    background:var(--bg);
+    color:var(--fg);
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial;
+  }
+
+  body{ padding:16px; }
+
+  h1{
+    margin:0 0 12px 0;
+    font-size:20px;
+    font-weight:700;
+  }
+
+  .note{
+    color:#ccc;
+    font-size:13px;
+    margin-bottom:12px;
+  }
+
+  textarea{
+    width:100%;
+    height:220px;
+    box-sizing:border-box;
+    padding:10px;
+    background:#111317;
+    color:var(--fg);
+    border-radius:8px;
+    border:1px solid #333;
+    font-size:14px;
+    resize:vertical;
+  }
+
+  .controls{
+    margin:10px 0 20px 0;
+    display:flex;
+    flex-wrap:wrap;
+    gap:10px;
+  }
+
+  .controls input{
+    background:#111317;
+    border:1px solid #444;
+    border-radius:6px;
+    color:var(--fg);
+    padding:6px;
+  }
+
+  button{
+    background:#22262a;
+    border:1px solid #444;
+    padding:10px 14px;
+    border-radius:8px;
+    color:var(--fg);
+    cursor:pointer;
+    font-size:14px;
+  }
+
+  button:hover{
+    background:#2c3136;
+  }
+
+  /* Seitenbuilder */
+  #pages{
+    margin-top:16px;
+  }
+
+  .monthPage{
+    background:var(--card);
+    color:var(--cardfg);
+    padding:16px;
+    margin:22px auto;
+    border-radius:10px;
+    max-width:850px;
+    box-shadow:0 12px 30px rgba(0,0,0,0.35);
+  }
+
+  .monthHeader{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    flex-wrap:wrap;
+    margin-bottom:8px;
+  }
+
+  .monthTitle{
+    font-size:20px;
+    font-weight:700;
+    margin-bottom:6px;
+  }
+
+  .legend{
+    display:flex;
+    flex-wrap:wrap;
+    gap:10px;
+    font-size:13px;
+  }
+
+  .legendItem{
+    display:flex;
+    align-items:center;
+    gap:6px;
+  }
+  .legendColor{
+    width:18px;
+    height:12px;
+    border-radius:3px;
+  }
+
+  .weekTitle{
+    margin:22px 0 6px 0;
+    font-weight:700;
+    font-size:15px;
+  }
+
+  .meta{
+    font-size:14px;
+    color:#333;
+    margin:8px 0;
+  }
+
   @media (prefers-color-scheme:dark){
-    .monthPage{background:#111;color:#eee}
-    .weekBlock{background:#141414;border:1px solid #333}
-    .metaSmall{color:#bbb}
+    .monthPage{
+      background:#111417;
+      color:#eee;
+    }
+    .meta{ color:#bbb; }
   }
 </style>
 </head>
 <body>
-  <h1>Glukose-Auswertung (Monat = Seite, Wochen untereinander)</h1>
-  <div class="note">Datumformat: <strong>TT.MM.JJJJ</strong>. Zwischenmessungen z.B. "9:10 Zwischenmessung 167" werden erfasst.</div>
 
-  <textarea id="input" placeholder="Füge hier deinen Text ein — Datumzeile z.B. 20.10.2025, danach Messzeilen."></textarea>
+<h1>Glukose-Auswertung (Monatsseiten • Wochenansicht)</h1>
+<div class="note">
+    Format: <b>TT.MM.JJJJ</b>. Zwischenmessungen werden automatisch erkannt.
+</div>
 
-  <div class="controls">
-    <label>Breite pro Tag (px): <input id="dayWidth" type="number" value="110" style="width:90px"></label>
-    <button id="btnGen">Diagramm erstellen</button>
-    <button id="btnPDF">PDF exportieren</button>
-    <button id="btnClear">Leeren</button>
-  </div>
+<textarea id="input" placeholder="Füge deine Messdaten hier ein..."></textarea>
 
-  <div id="pages"></div>
+<div class="controls">
+  <label>Breite pro Tag (px):
+    <input id="dayWidth" type="number" value="110" />
+  </label>
 
+  <button id="btnGen">Diagramm erstellen</button>
+  <button id="btnPDF">PDF exportieren</button>
+  <button id="btnClear">Leeren</button>
+</div>
+
+<div id="pages"></div>
 <script>
-/* ------------------ Utilities ------------------ */
+// ============= Hilfsfunktionen =============
 function parseDateDMY(s){
   const p = s.split('.');
-  if (p.length < 3) return null;
-  return new Date(parseInt(p[2],10), parseInt(p[1],10)-1, parseInt(p[0],10));
+  return new Date(+p[2], p[1]-1, +p[0]);
 }
 function isoWeekInfo(date){
-  const tmp = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-  tmp.setUTCDate(tmp.getUTCDate() + 4 - (tmp.getUTCDay()||7));
-  const yearStart = new Date(Date.UTC(tmp.getUTCFullYear(),0,1));
-  const weekNo = Math.ceil((((tmp - yearStart)/86400000)+1)/7);
-  return {year: tmp.getUTCFullYear(), week: weekNo};
+  const t = new Date(Date.UTC(date.getFullYear(),date.getMonth(),date.getDate()));
+  t.setUTCDate(t.getUTCDate() + 4 - (t.getUTCDay()||7));
+  const yStart = new Date(Date.UTC(t.getUTCFullYear(),0,1));
+  const week = Math.ceil((((t - yStart)/86400000)+1)/7);
+  return {year:t.getUTCFullYear(), week:week};
 }
-function strokedText(ctx,text,x,y,font='13px Arial',fill='#000',stroke='#fff',lw=0.8,align='center'){
-  ctx.font = font; ctx.textAlign = align; ctx.lineWidth = lw; ctx.strokeStyle = stroke; ctx.strokeText(text,x,y); ctx.fillStyle = fill; ctx.fillText(text,x,y);
+function textStroke(ctx,str,x,y){
+  ctx.lineWidth = 0.7;
+  ctx.strokeStyle = "rgba(255,255,255,0.9)";
+  ctx.strokeText(str,x,y);
+  ctx.fillStyle = "#000";
+  ctx.fillText(str,x,y);
 }
 
-/* ------------------ Parser: Text -> days ------------------ */
+// ============= DATEN PARSER =============
 function parseTextToDays(text){
   const lines = text.split(/\r?\n/).map(l=>l.trim());
   const dateRe = /^\d{1,2}\.\d{1,2}\.\d{4}$/;
-  const days = [];
-  let cur = null;
-  for (let line of lines){
-    if (!line) continue;
-    if (dateRe.test(line)){
-      if (cur) days.push(cur);
-      const dObj = parseDateDMY(line);
-      cur = { dateStr: line, dateObj: dObj, label: line.slice(0,5), F:null, M:null, A:null, S:null, Z:[] };
+
+  const days=[];
+  let cur=null;
+
+  for(let line of lines){
+    if(!line) continue;
+
+    if(dateRe.test(line)){
+      if(cur) days.push(cur);
+      cur = {dateStr:line, dateObj:parseDateDMY(line), F:null,M:null,A:null,S:null,Z:[]};
       continue;
     }
-    if (!cur) continue;
-    const low = line.toLowerCase();
-    const valMatch = line.match(/(\d{2,3})(?!.*\d)/);
-    const v = valMatch ? parseInt(valMatch[1],10) : null;
-    if (low.startsWith('früh') || low.startsWith('frueh')) cur.F = v;
-    else if (low.startsWith('mittag')) cur.M = v;
-    else if (low.startsWith('abend')) cur.A = v;
-    else if (low.startsWith('schlaf')) cur.S = v;
-    else if (low.includes('zwischen') || low.includes('messung')) { if (v!=null) cur.Z.push(v); }
+
+    if(!cur) continue;
+
+    const lo=line.toLowerCase();
+    const m=line.match(/(\d{2,3})/);
+    const v=m? +m[1] : null;
+
+    if(lo.startsWith("früh")||lo.startsWith("frueh")) cur.F=v;
+    else if(lo.startsWith("mittag")) cur.M=v;
+    else if(lo.startsWith("abend")) cur.A=v;
+    else if(lo.startsWith("schlaf")) cur.S=v;
+    else if(lo.includes("zwischen")){ if(v!=null) cur.Z.push(v); }
   }
-  if (cur) days.push(cur);
-  return days.filter(d => d.F!=null || d.M!=null || d.A!=null || d.S!=null || (d.Z && d.Z.length>0));
+
+  if(cur) days.push(cur);
+  return days;
 }
 
-/* ------------------ Grouping ------------------ */
+// ============= Gruppieren nach Monat + Woche =============
 function groupByMonth(days){
-  const map = {};
+  const m={};
   days.forEach(d=>{
-    const key = `${d.dateObj.getFullYear()}-${String(d.dateObj.getMonth()+1).padStart(2,'0')}`;
-    if (!map[key]) map[key]=[];
-    map[key].push(d);
+    const k = `${d.dateObj.getFullYear()}-${String(d.dateObj.getMonth()+1).padStart(2,'0')}`;
+    if(!m[k]) m[k]=[];
+    m[k].push(d);
   });
-  Object.keys(map).forEach(k=> map[k].sort((a,b)=>a.dateObj - b.dateObj));
-  return map;
-}
-function groupIntoWeeks(days){
-  const wk = {};
-  days.forEach(d=>{
-    const info = isoWeekInfo(d.dateObj);
-    const key = `${info.year}-W${String(info.week).padStart(2,'0')}`;
-    if (!wk[key]) wk[key]={week:info.week, year:info.year, days:[]};
-    wk[key].days.push(d);
-  });
-  const arr = Object.values(wk);
-  arr.forEach(w=> w.days.sort((a,b)=>a.dateObj - b.dateObj));
-  arr.sort((a,b)=> a.days[0].dateObj - b.days[0].dateObj);
-  return arr;
+  Object.keys(m).forEach(k => m[k].sort((a,b)=>a.dateObj - b.dateObj));
+  return m;
 }
 
-/* ------------------ Drawing week canvas ------------------ */
-function drawWeekCanvas(days, opts){
+function groupWeeks(days){
+  const m={};
+  for(let d of days){
+    const info=isoWeekInfo(d.dateObj);
+    const k=`${info.year}-W${info.week}`;
+    if(!m[k]) m[k]={week:info.week,year:info.year,days:[]};
+    m[k].days.push(d);
+  }
+  return Object.values(m).sort((a,b)=>a.days[0].dateObj - b.days[0].dateObj);
+}
+
+// ============= CANVAS ZEICHNUNG =============
+function drawWeekCanvas(days,opts){
   const dayWidth = opts.dayWidth || 110;
-  const scale = opts.scale || 2; // retina
-  const padding = {left:70,right:40,top:60,bottom:120};
-  const n = days.length;
-  const widthCss = Math.max(600, padding.left + padding.right + n*dayWidth);
-  const heightCss = 340;
-  const canvas = document.createElement('canvas');
-  canvas.className='weekCanvas';
-  canvas.width = Math.round(widthCss * scale);
-  canvas.height = Math.round(heightCss * scale);
-  canvas.style.width = widthCss + 'px';
-  canvas.style.height = heightCss + 'px';
-  const ctx = canvas.getContext('2d');
-  ctx.scale(scale, scale);
+  const scale=2;
+  const pad={l:60,r:40,t:45,b:110};
 
-  // bg white (for PDF readability)
-  ctx.fillStyle = '#fff';
-  ctx.fillRect(0,0,widthCss,heightCss);
+  const widthCSS = pad.l + pad.r + days.length*dayWidth;
+  const heightCSS = 330;
 
-  const innerW = widthCss - padding.left - padding.right;
-  const innerH = heightCss - padding.top - padding.bottom;
+  const c=document.createElement("canvas");
+  c.width = widthCSS*scale;
+  c.height = heightCSS*scale;
+  c.style.width = widthCSS+"px";
+  c.style.height = heightCSS+"px";
 
-  // collect values for y-scale
-  const vals = [];
-  days.forEach(d=>{
-    ['F','M','A','S'].forEach(k=>{ if (d[k]!=null) vals.push(d[k]); });
-    if (d.Z && d.Z.length) d.Z.forEach(z=>vals.push(z));
-  });
-  const maxVal = vals.length ? Math.max(...vals) : 200;
-  const yMax = Math.ceil(maxVal/10)*10;
+  const ctx=c.getContext("2d");
+  ctx.scale(scale,scale);
 
-  // horizontal gridlines (medium visibility)
-  const ySteps = 5;
-  ctx.lineWidth = 1;
-  for (let i=0;i<=ySteps;i++){
-    const t = i/ySteps;
-    const y = padding.top + innerH * t;
-    ctx.strokeStyle = 'rgba(0,0,0,0.12)';
-    ctx.beginPath(); ctx.moveTo(padding.left, y); ctx.lineTo(widthCss - padding.right, y); ctx.stroke();
-    const val = Math.round(yMax - yMax*t);
-    strokedText(ctx, String(val), 14, y+6, '13px Arial', '#000', '#fff', 0.8, 'left');
+  ctx.fillStyle="#fff";
+  ctx.fillRect(0,0,widthCSS,heightCSS);
+
+  const vals=[];
+  for(let d of days){
+    ["F","M","A","S"].forEach(k=>{ if(d[k]!=null) vals.push(d[k]); });
+    if(d.Z) d.Z.forEach(z=>vals.push(z));
   }
 
-  // vertical faint separators
-  const step = innerW / Math.max(1,n);
-  for (let i=0;i<=n;i++){
-    const x = padding.left + step * i;
-    ctx.strokeStyle = 'rgba(0,0,0,0.06)';
-    ctx.beginPath(); ctx.moveTo(x, padding.top); ctx.lineTo(x, padding.top + innerH); ctx.stroke();
-  }
+  const max = vals.length?Math.ceil(Math.max(...vals)/10)*10:200;
+  const ih = heightCSS-pad.t-pad.b;
 
-  // bar settings (narrower bars, higher height)
-  const barW = Math.min(22, Math.floor(step * 0.16));
-  const offsets = [-2,-1,0,1,2];
-  const colors = {F:getComputedStyle(document.documentElement).getPropertyValue('--cF').trim()||'#00c8ff',
-                  M:getComputedStyle(document.documentElement).getPropertyValue('--cM').trim()||'#30ff7a',
-                  A:getComputedStyle(document.documentElement).getPropertyValue('--cA').trim()||'#ffb53a',
-                  S:getComputedStyle(document.documentElement).getPropertyValue('--cS').trim()||'#ff5252',
-                  Z:getComputedStyle(document.documentElement).getPropertyValue('--cZ').trim()||'#c07cff'};
-
-  // subtle shadow
-  ctx.shadowColor = 'rgba(0,0,0,0.12)'; ctx.shadowBlur = 6; ctx.shadowOffsetY = 2;
-
-  function drawRounded(x,y,w,h,r,fillColor){
-    ctx.fillStyle = fillColor;
-    const radius = Math.min(r, w/2, h/2);
+  // horizontale Linien
+  ctx.strokeStyle="rgba(0,0,0,0.10)";
+  ctx.lineWidth=1;
+  for(let i=0;i<=5;i++){
+    const y = pad.t + ih*(i/5);
     ctx.beginPath();
-    ctx.moveTo(x+radius, y);
-    ctx.lineTo(x+w-radius, y);
-    ctx.quadraticCurveTo(x+w, y, x+w, y+radius);
-    ctx.lineTo(x+w, y+h-radius);
-    ctx.quadraticCurveTo(x+w, y+h, x+w-radius, y+h);
-    ctx.lineTo(x+radius, y+h);
-    ctx.quadraticCurveTo(x, y+h, x, y+h-radius);
-    ctx.lineTo(x, y+radius);
-    ctx.quadraticCurveTo(x, y, x+radius, y);
+    ctx.moveTo(pad.l,y);
+    ctx.lineTo(widthCSS-pad.r,y);
+    ctx.stroke();
+    textStroke(ctx,String(max - max*(i/5)), pad.l-20, y+4);
+  }
+
+  // vertikale Linien
+  const step = (widthCSS-pad.l-pad.r)/days.length;
+  ctx.strokeStyle="rgba(0,0,0,0.05)";
+  for(let i=0;i<=days.length;i++){
+    const x = pad.l + step*i;
+    ctx.beginPath();
+    ctx.moveTo(x,pad.t);
+    ctx.lineTo(x,pad.t+ih);
+    ctx.stroke();
+  }
+
+  // Balken
+  const barW = Math.min(20, step*0.18);
+  const keys=["F","M","A","S","Z"];
+  const off=[-2,-1,0,1,2];
+
+  const col = {
+    F:"var(--cF)", M:"var(--cM)", A:"var(--cA)",
+    S:"var(--cS)", Z:"var(--cZ)"
+  };
+
+  function drawR(x,y,w,h,color){
+    ctx.fillStyle=color;
+    ctx.beginPath();
+    ctx.moveTo(x,y);
+    ctx.lineTo(x+w,y);
+    ctx.lineTo(x+w,y+h);
+    ctx.lineTo(x,y+h);
     ctx.closePath();
     ctx.fill();
   }
 
-  for (let k=0;k<5;k++){
-    const key = ['F','M','A','S','Z'][k];
-    for (let i=0;i<n;i++){
-      let v = null;
-      if (key==='Z'){ const z = days[i].Z||[]; v = z.length ? Math.round(z.reduce((a,b)=>a+b,0)/z.length) : null; }
-      else v = days[i][key];
-      if (v==null) continue;
-      const cx = padding.left + step*(i + 0.5);
-      const x = cx + offsets[k] * (barW + 4);
-      const h = (v / yMax) * innerH;
-      const y = padding.top + innerH - h;
-      drawRounded(x - barW/2, y, barW, h, 6, colors[key]);
-      // value label above bar
-      strokedText(ctx, String(v), x, y - 8, '12px Arial', '#000', '#fff', 0.8, 'center');
+  keys.forEach((k,ki)=>{
+    for(let i=0;i<days.length;i++){
+      let v=null;
+      if(k==="Z"){
+        if(days[i].Z.length){
+          v = Math.round(days[i].Z.reduce((a,b)=>a+b,0)/days[i].Z.length);
+        }
+      } else v=days[i][k];
+      if(v==null) continue;
+
+      const cx = pad.l + step*(i+0.5);
+      const x = cx + off[ki]*(barW+3);
+      const h = (v/max)*ih;
+      const y = pad.t + ih - h;
+
+      drawR(x-barW/2, y, barW, h, getComputedStyle(document.documentElement).getPropertyValue(col[k]));
+
+      textStroke(ctx,String(v), x, y-6);
     }
-  }
-
-  // remove shadow for lines/points
-  ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
-
-  // day averages
-  const dayAvg = days.map(d=>{
-    const arr = [d.F,d.M,d.A,d.S].filter(v=>v!=null);
-    return arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : null;
   });
 
-  // week trend = moving avg of dayAvg (w=3)
-  function movingAvg(arr,w=3){
-    const out = []; for (let i=0;i<arr.length;i++){ const s=Math.max(0,i-(w-1)); const seg=arr.slice(s,i+1).filter(v=>v!=null); out.push(seg.length?seg.reduce((a,b)=>a+b,0)/seg.length:null); } return out;
-  }
-  const weekTrend = movingAvg(dayAvg,3);
-
-  // draw week trend (dotted violet)
-  ctx.beginPath(); ctx.setLineDash([6,6]); ctx.lineWidth = 2.5; ctx.strokeStyle = colors.Z;
-  let started=false;
-  for (let i=0;i<n;i++){
-    if (weekTrend[i]==null){ started=false; continue; }
-    const x = padding.left + step*(i + 0.5);
-    const y = padding.top + innerH - (weekTrend[i]/yMax)*innerH;
-    if (!started){ ctx.moveTo(x,y); started=true; } else ctx.lineTo(x,y);
-  }
-  ctx.stroke();
-  ctx.setLineDash([]);
-
-  // dayAvg points
-  for (let i=0;i<n;i++){
-    if (dayAvg[i]==null) continue;
-    const x = padding.left + step*(i + 0.5);
-    const y = padding.top + innerH - (dayAvg[i]/yMax)*innerH;
-    ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(x,y,3.5,0,Math.PI*2); ctx.fill(); ctx.lineWidth=2; ctx.strokeStyle='#fff'; ctx.stroke();
-    strokedText(ctx, Math.round(dayAvg[i]), x, y - 12, '11px Arial', '#000', '#fff', 0.8, 'center');
-  }
-
-  // monthAvg line (solid yellow)
-  if (opts.monthAvg != null){
-    ctx.beginPath(); ctx.lineWidth = 3; ctx.strokeStyle = '#f3c41a';
-    const y = padding.top + innerH - (opts.monthAvg / yMax)*innerH;
-    ctx.moveTo(padding.left, y); ctx.lineTo(widthCss - padding.right, y); ctx.stroke();
-    strokedText(ctx, 'Monats-Ø: ' + Math.round(opts.monthAvg) + ' mg/dL', widthCss - padding.right - 10, y - 8, '12px Arial', '#000', '#fff', 0.8, 'right');
-  }
-
-  // vertical rotated date labels
+  // Tags
   ctx.save();
-  ctx.fillStyle = '#000'; ctx.font = '13px Arial';
-  for (let i=0;i<n;i++){
-    const lbl = days[i].label;
-    const x = padding.left + step*(i + 0.5);
-    const y = heightCss - padding.bottom + 70;
-    ctx.translate(x,y); ctx.rotate(-Math.PI/2);
-    ctx.lineWidth = 1; ctx.strokeStyle = '#fff'; ctx.strokeText(lbl, 0, 0);
-    ctx.fillStyle = '#000'; ctx.fillText(lbl, 0, 0);
-    ctx.rotate(Math.PI/2); ctx.translate(-x,-y);
+  ctx.font="13px Arial";
+  ctx.textAlign="center";
+
+  for(let i=0;i<days.length;i++){
+    const x = pad.l + step*(i+0.5);
+    const y = heightCSS - pad.b + 60;
+
+    ctx.translate(x,y);
+    ctx.rotate(-Math.PI/2);
+    textStroke(ctx, days[i].dateStr.slice(0,5), 0,0);
+    ctx.rotate(Math.PI/2);
+    ctx.translate(-x,-y);
   }
   ctx.restore();
 
-  // return canvas and metrics
-  return {canvas, dayAvg, weekTrend, yMax};
+  return c;
 }
 
-/* ------------------ Build pages ------------------ */
-document.getElementById('btnGen').addEventListener('click', ()=> {
-  const raw = document.getElementById('input').value;
-  const dayWidth = parseInt(document.getElementById('dayWidth').value || '110',10);
-  const pages = document.getElementById('pages');
-  pages.innerHTML = '';
-  const days = parseTextToDays(raw);
-  if (!days.length){ alert('Keine Daten gefunden. Bitte Text & Datumformat prüfen (TT.MM.JJJJ).'); return; }
-  days.sort((a,b)=>a.dateObj - b.dateObj);
+// ============= SEITEN GENERIEREN =============
+document.getElementById("btnGen").onclick = ()=>{
+  const raw = input.value.trim();
+  if(!raw){ alert("Bitte Text eingeben."); return; }
+
+  const days = parseTextToDays(raw).sort((a,b)=>a.dateObj - b.dateObj);
+  if(!days.length){ alert("Keine gültigen Daten."); return; }
+
   const months = groupByMonth(days);
-  // store start/end for filename
-  pages.dataset.start = days[0].dateStr;
-  pages.dataset.end = days[days.length-1].dateStr;
+  const container = document.getElementById("pages");
+  container.innerHTML="";
 
-  for (const monthKey of Object.keys(months).sort()) {
-    const monthDays = months[monthKey];
-    const weeks = groupIntoWeeks(monthDays);
-    const monthDiv = document.createElement('div'); monthDiv.className='monthPage';
+  container.dataset.start = days[0].dateStr;
+  container.dataset.end   = days[days.length-1].dateStr;
 
-    // month header
-    const first = monthDays[0].label, last = monthDays[monthDays.length-1].label;
-    const header = document.createElement('div'); header.className='monthHeader';
-    const title = document.createElement('div'); title.className='monthTitle'; title.textContent = `Monat: ${monthKey} — ${first} bis ${last}`;
-    header.appendChild(title);
+  for(const mKey of Object.keys(months).sort()){
+    const mdays = months[mKey];
+    const ws = groupWeeks(mdays);
 
-    // legend (once per month)
-    const legend = document.createElement('div'); legend.className='legend';
-    function addLeg(n,c){ const it=document.createElement('div'); it.className='legendItem'; it.innerHTML = `<span class="legendColor" style="background:${c}"></span><span>${n}</span>`; legend.appendChild(it); }
-    addLeg('Frühstück', getComputedStyle(document.documentElement).getPropertyValue('--cF'));
-    addLeg('Mittag', getComputedStyle(document.documentElement).getPropertyValue('--cM'));
-    addLeg('Abend', getComputedStyle(document.documentElement).getPropertyValue('--cA'));
-    addLeg('Schlafen', getComputedStyle(document.documentElement).getPropertyValue('--cS'));
-    addLeg('Zwischen', getComputedStyle(document.documentElement).getPropertyValue('--cZ'));
-    addLeg('Wochendurchschn.', '#8b5cf6'); addLeg('Monatsdurchschn.', '#f3c41a');
-    header.appendChild(legend);
-    monthDiv.appendChild(header);
+    const div=document.createElement("div");
+    div.className="monthPage";
 
-    // month average
-    const allVals = []; monthDays.forEach(d=>['F','M','A','S'].forEach(k=>{ if (d[k]!=null) allVals.push(d[k]); }));
-    const monthAvg = allVals.length ? Math.round(allVals.reduce((a,b)=>a+b,0)/allVals.length) : null;
-    const meta = document.createElement('div'); meta.className='metaSmall'; meta.textContent = monthAvg ? `Monatsdurchschnitt (ohne Zwischen): ${monthAvg} mg/dL` : 'Monatsdurchschnitt: n/a';
-    monthDiv.appendChild(meta);
+    // Header
+    const head=document.createElement("div");
+    head.className="monthHeader";
 
-    // weeks under each other
-    weeks.forEach(w=>{
-      // keep only days belonging to this month
-      const daysInThisWeek = w.days.filter(d=> `${d.dateObj.getFullYear()}-${String(d.dateObj.getMonth()+1).padStart(2,'0')}` === monthKey );
-      if (!daysInThisWeek.length) return;
-      const weekTitle = document.createElement('div'); weekTitle.className='weekTitle'; weekTitle.textContent = `KW ${w.week} — ${w.monday.toLocaleDateString()} bis ${w.sunday.toLocaleDateString()}`;
-      monthDiv.appendChild(weekTitle);
-      // draw canvas for this week
-      const {canvas} = drawWeekCanvas(daysInThisWeek, {dayWidth:dayWidth, scale:2, monthAvg: monthAvg});
-      monthDiv.appendChild(canvas);
-      // week average display
-      const vv = []; daysInThisWeek.forEach(d=>['F','M','A','S'].forEach(k=>{ if (d[k]!=null) vv.push(d[k]); }));
-      const weekAvg = vv.length ? Math.round(vv.reduce((a,b)=>a+b,0)/vv.length) : null;
-      const small = document.createElement('div'); small.className='metaSmall'; small.textContent = weekAvg ? `Wochendurchschnitt: ${weekAvg} mg/dL` : 'Wochendurchschnitt: n/a';
-      monthDiv.appendChild(small);
+    const first=mdays[0].dateStr.slice(0,5);
+    const last =mdays[mdays.length-1].dateStr.slice(0,5);
+
+    const t=document.createElement("div");
+    t.className="monthTitle";
+    t.textContent=`Monat ${mKey} – ${first} bis ${last}`;
+    head.appendChild(t);
+
+    // Legende
+    const leg=document.createElement("div");
+    leg.className="legend";
+    function L(lbl,c){
+      const e=document.createElement("div");
+      e.className="legendItem";
+      e.innerHTML=`<span class="legendColor" style="background:${c}"></span>${lbl}`;
+      leg.appendChild(e);
+    }
+    L("Frühstück","var(--cF)");
+    L("Mittag","var(--cM)");
+    L("Abend","var(--cA)");
+    L("Schlafen","var(--cS)");
+    L("Zwischen","var(--cZ)");
+
+    head.appendChild(leg);
+    div.appendChild(head);
+
+    // Wochen
+    ws.forEach(w=>{
+      const dd = w.days.filter(d=> mdays.includes(d));
+      if(!dd.length) return;
+
+      const wk=document.createElement("div");
+      wk.className="weekTitle";
+      const m=dd[0].dateObj;
+      const so=dd[dd.length-1].dateObj;
+      wk.textContent = `KW ${w.week} – ${m.toLocaleDateString()} bis ${so.toLocaleDateString()}`;
+      div.appendChild(wk);
+
+      const canv = drawWeekCanvas(dd,{dayWidth:+dayWidth.value});
+      div.appendChild(canv);
     });
 
-    pages.appendChild(monthDiv);
+    container.appendChild(div);
   }
+};
 
-  window.scrollTo({top:0, behavior:'smooth'});
-});
+// ============= PDF =============
+btnPDF.onclick = ()=>{
+  const pages=document.querySelectorAll(".monthPage");
+  if(!pages.length){ alert("Bitte zuerst Diagramme erstellen."); return; }
 
-/* ------------------ PDF export (new window, one month per page) ------------------ */
-document.getElementById('btnPDF').addEventListener('click', ()=> {
-  const pages = document.querySelectorAll('.monthPage');
-  if (!pages.length){ alert('Bitte zuerst Diagramme erstellen.'); return; }
-  const start = document.getElementById('pages').dataset.start || 'start';
-  const end = document.getElementById('pages').dataset.end || 'end';
-  const win = window.open('', '_blank');
-  const style = `<style>body{margin:0;padding:10px;font-family:Arial;background:#fff} .page{width:794px;margin:0 auto 18px;page-break-after:always} img{display:block;width:100%;height:auto;border:1px solid #ccc}</style>`;
-  win.document.write('<html><head><title>Glukose_'+start+'-'+end+'</title>'+style+'</head><body>');
-  (async ()=>{
-    for (let md of pages){
-      const canvases = md.querySelectorAll('canvas');
-      if (!canvases.length) continue;
-      // compute combined height
-      let totalW = canvases[0].width;
-      let totalH = 120; // header space
-      canvases.forEach(c=> totalH += c.height + 20);
-      const big = document.createElement('canvas'); big.width = totalW; big.height = totalH;
-      const ctx = big.getContext('2d');
-      ctx.fillStyle = '#fff'; ctx.fillRect(0,0,big.width,big.height);
-      // header text
-      const header = md.querySelector('.monthTitle')?.textContent || '';
-      ctx.fillStyle = '#000'; ctx.font = '20px Arial'; ctx.textAlign = 'center';
-      ctx.fillText(header, big.width/2, 28);
-      const meta = md.querySelector('.metaSmall')?.textContent || '';
-      ctx.font = '12px Arial'; ctx.fillText(meta, big.width/2, 50);
-      // draw canvases
-      let y = 70;
-      for (let c of canvases){
-        // canvases are high-res (scaled), draw scaled to full width
-        ctx.drawImage(c, 0, y, c.width, c.height);
-        y += c.height + 20;
-      }
-      const data = big.toDataURL('image/png');
-      win.document.write('<div class="page"><img src="'+data+'"></div>');
-    }
-    win.document.write('</body></html>');
-    win.document.close();
-    setTimeout(()=>{ win.focus(); win.print(); }, 500);
-  })();
-});
+  const s=pages[0].parentElement.dataset.start||"start";
+  const e=pages[0].parentElement.dataset.end||"end";
 
-/* ------------------ Clear ------------------ */
-document.getElementById('btnClear').addEventListener('click', ()=> {
-  document.getElementById('input').value = '';
-  document.getElementById('pages').innerHTML = '';
-  document.getElementById('pages').removeAttribute('data-start');
-  document.getElementById('pages').removeAttribute('data-end');
-});
+  const win=window.open("");
+  win.document.write(`
+    <html><head><title>Glukose_${s}-${e}</title>
+    <style>
+      body{background:#fff;margin:0;padding:0;font-family:Arial;}
+      .page{width:800px;margin:20px auto;page-break-after:always}
+    </style>
+    </head><body>
+  `);
+
+  pages.forEach(pg=>{
+    const imgs=[...pg.querySelectorAll("canvas")].map(c=>c.toDataURL());
+    win.document.write(`<div class="page">`);
+    imgs.forEach(src=> win.document.write(`<img src="${src}" style="width:100%;margin-bottom:20px;" />`));
+    win.document.write(`</div>`);
+  });
+
+  win.document.write("</body></html>");
+  win.document.close();
+  setTimeout(()=>win.print(),300);
+};
+
+// ============= CLEAR =============
+btnClear.onclick = ()=>{
+  input.value="";
+  pages.innerHTML="";
+};
 </script>
 </body>
 </html>
