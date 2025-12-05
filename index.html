@@ -2,118 +2,29 @@
 <html lang="de">
 <head>
 <meta charset="UTF-8" />
-<title>Glukose Diagramm Generator</title>
+<title>Glukose Diagramm mit Durchschnitten</title>
+<script src="cdn.jsdelivr.net"></script>
 <style>
-    body {
-        font-family: Arial, sans-serif;
-        background: #f5f5f5;
-        color: #111;
-        padding: 20px;
-    }
-
-    h1 {
-        text-align: center;
-        font-size: 32px;
-    }
-
-    textarea {
-        width: 100%;
-        height: 220px;
-        font-size: 14px;
-        background: #fff;
-        color: #000;
-        border: 1px solid #999;
-        padding: 10px;
-        box-sizing: border-box;
-    }
-
-    button {
-        padding: 12px;
-        margin-top: 10px;
-        border: none;
-        color: white;
-        font-size: 16px;
-        cursor: pointer;
-        width: 100%;
-        margin-bottom: 10px;
-    }
-    
-    #generateBtn {
-        background: #4CAF50;
-    }
-
-    #generateBtn:hover {
-        background: #45A049;
-    }
-
-    #exportPdfBtn {
-        background: #007bff;
-        display: none;
-    }
-
-    #exportPdfBtn:hover {
-        background: #0056b3;
-    }
-
-    canvas {
-        margin-top: 20px;
-        width: 100%;
-        border: 1px solid #ccc;
-        background: #ffffff;
-    }
-
-    .page {
-        page-break-after: always;
-        margin-bottom: 50px;
-        background: #fff;
-        padding: 20px;
-        box-shadow: 0 0 10px rgba(0,0,0,0.1);
-    }
-
-    .legend {
-        padding: 12px;
-        background: #fff;
-        border: 1px solid #ccc;
-        margin-bottom: 15px;
-        display: flex;
-        gap: 20px;
-        font-size: 14px;
-    }
-
-    .legend div {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-    }
-
-    .box {
-        width: 16px;
-        height: 16px;
-    }
-
+    body { font-family: Arial, sans-serif; background: #f5f5f5; padding: 20px; }
+    h1 { text-align: center; }
+    textarea { width: 100%; height: 200px; padding: 10px; box-sizing: border-box; }
+    button { padding: 12px; margin-top: 10px; background: #4CAF50; border: none; color: white; cursor: pointer; width: 100%; }
+    button:hover { background: #45A049; }
+    .page { page-break-inside: avoid; margin-bottom: 30px; padding: 15px; background: #fff; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+    .chart-container { position: relative; height: 400px; width: 100%; margin-top: 10px; }
 </style>
 </head>
 <body>
 
 <h1>Glukose Diagramm Generator</h1>
 
-<p>Daten einfügen:</p>
-<textarea id="input"></textarea>
-<button id="generateBtn" onclick="generate()">Diagramme erzeugen</button>
-<button id="exportPdfBtn" onclick="exportToPdf()">Als PDF exportieren</button>
+<textarea id="input" placeholder="Fügen Sie hier Ihre Daten ein..."></textarea>
+<button onclick="generateCharts()">Diagramme erzeugen</button>
 
 <div id="output"></div>
 
-<!-- Bibliotheken für PDF-Export -->
-<script src="cdnjs.cloudflare.com"></script>
-<script src="cdnjs.cloudflare.com"></script>
-
 <script>
-    const { jsPDF } = window.jspdf;
-
-    /* ---------------------------------------------------------
-       BEISPIELDATEN
-    ------------------------------------------------------------*/
+    // Beispiel Daten zum Testen
     document.getElementById("input").value = `
 01.12.2025
 Frühstück: 110
@@ -144,24 +55,19 @@ Frühstück: 115
 Mittagessen: 142
 Abendessen: 128
 Schlafen: 105
+
+08.12.2025
+Frühstück: 110
+Mittagessen: 145
+Abendessen: 130
+Schlafen: 120
 `;
 
-    /* ---------------------------------------------------------
-       DATEN PARSEN
-    ------------------------------------------------------------*/
 
     function parseData(text) {
         const lines = text.split("\n").map(l => l.trim()).filter(l => l.length > 0);
         const entries = [];
         let currentDate = null;
-
-        const typeColors = {
-            "Frühstück": "#00aaff",
-            "Mittagessen": "#00cc44",
-            "Abendessen": "#ff9900",
-            "Schlafen": "#ff3333",
-            "Zwischenmessung": "#aa55ff"
-        };
 
         for (let line of lines) {
             if (line.match(/^\d{1,2}\.\d{1,2}\.\d{4}$/)) {
@@ -169,27 +75,20 @@ Schlafen: 105
                 continue;
             }
 
-            // Korrigierter Regex, um den Wert korrekt zu extrahieren
             const m = line.match(/(Frühstück|Mittagessen|Abendessen|Schlafen|Zwischenmessung):\s*(\d+)\s*$/);
             if (m && currentDate) {
                 entries.push({
                     date: currentDate,
                     type: m[1],
                     value: parseInt(m[2]),
-                    color: typeColors[m[1]]
                 });
             }
         }
         return entries;
     }
 
-    /* ---------------------------------------------------------
-       NACH KALENDERWOCHE GRUPPIEREN
-    ------------------------------------------------------------*/
-
     function dateToISO(d) {
         const [day, month, year] = d.split(".");
-        // JS Monate sind 0-basiert
         return new Date(year, month - 1, day);
     }
 
@@ -214,96 +113,30 @@ Schlafen: 105
         return map;
     }
 
-    /* ---------------------------------------------------------
-       ZEICHNEN
-    ------------------------------------------------------------*/
-
-    function drawChart(canvas, weekData, title) {
-        const ctx = canvas.getContext("2d");
-        const W = canvas.width;
-        const H = canvas.height;
-        ctx.fillStyle = "#fff";
-        ctx.fillRect(0,0,W,H);
-
-        // Sortiereinträge innerhalb der Woche nach Datum, um Tage in der richtigen Reihenfolge zu bekommen
-        weekData.sort((a, b) => dateToISO(a.date) - dateToISO(b.date));
-        
+    function calculateAverages(weekData) {
         const uniqueDays = [...new Set(weekData.map(e => e.date))];
+        const dayAverages = {};
+        let weekTotal = 0;
+        let weekCount = 0;
 
-        const maxValue = Math.max(...weekData.map(e => e.value), 180); 
-        const maxBarHeight = H - 140;
-        const startX = 80;
-        let currentX = startX;
-        const individualBarWidth = 40; // Breite eines einzelnen Messwert-Balkens
-        const dayGap = 60; // Großer Abstand zwischen den Tagen
-
-        // Orientierungslinien und Y-Achse Beschriftung
-        ctx.strokeStyle = "rgba(0,0,0,0.15)";
-        ctx.fillStyle = "#555";
-        ctx.font = "20px Arial";
-        const numLines = 6;
-        for (let i = 0; i < numLines; i++) {
-            const y = 60 + i * (maxBarHeight / (numLines - 1));
-            ctx.beginPath();
-            ctx.moveTo(60, y);
-            ctx.lineTo(W - 40, y);
-            ctx.stroke();
-            const value = Math.round(maxValue * (1 - i / (numLines - 1)));
-            ctx.fillText(value, 10, y + 5);
-        }
-
-        // Titel
-        ctx.fillStyle = "#000";
-        ctx.font = "32px Arial";
-        ctx.fillText(title, startX, 50);
-
-        ctx.font = "18px Arial";
-
-        for (let day of uniqueDays) {
+        for (const day of uniqueDays) {
             const dayEntries = weekData.filter(e => e.date === day);
-            const dayWidth = dayEntries.length * individualBarWidth;
-
-            // Datum unter Balken zentriert
-            ctx.save();
-            ctx.translate(currentX + dayWidth / 2, H - 55);
-            ctx.rotate(-Math.PI/2);
-            ctx.fillStyle = "#000";
-            ctx.fillText(day, 0, 0);
-            ctx.restore();
-
-            let xOffset = 0;
-            for (let e of dayEntries) {
-                const h = (e.value / maxValue) * maxBarHeight;
-                const yPos = (H - 80) - h;
-
-                // Balken zeichnen
-                ctx.fillStyle = e.color;
-                ctx.fillRect(currentX + xOffset, yPos, individualBarWidth, h);
-
-                // Wert über Balken schreiben
-                ctx.fillStyle = "#000";
-                ctx.font = "16px Arial";
-                ctx.fillText(e.value, currentX + xOffset + 5, yPos - 5);
-
-                xOffset += individualBarWidth;
-            }
-            // Abstand zwischen den Tagen
-            currentX += dayWidth + dayGap;
+            const dayTotal = dayEntries.reduce((sum, e) => sum + e.value, 0);
+            dayAverages[day] = dayTotal / dayEntries.length;
+            weekTotal += dayTotal;
+            weekCount += dayEntries.length;
         }
+
+        const weekAverage = weekTotal / weekCount;
+        return { dayAverages, weekAverage };
     }
 
-    /* ---------------------------------------------------------
-       GENERIEREN
-    ------------------------------------------------------------*/
 
-    function generate() {
+    function generateCharts() {
         const text = document.getElementById("input").value;
-        if (!text.trim()) return;
-
         const output = document.getElementById("output");
         output.innerHTML = "";
-        document.getElementById("exportPdfBtn").style.display = 'block';
-
+        
         const entries = parseData(text);
         if (entries.length === 0) {
             output.innerHTML = "<p>Keine gültigen Daten gefunden.</p>";
@@ -312,65 +145,110 @@ Schlafen: 105
         
         const weeks = groupByWeek(entries);
         const sortedWeeksKeys = Object.keys(weeks).sort();
+        
+        const typeColors = {
+            "Frühstück": "rgba(0, 170, 255, 0.8)",
+            "Mittagessen": "rgba(0, 204, 68, 0.8)",
+            "Abendessen": "rgba(255, 153, 0, 0.8)",
+            "Schlafen": "rgba(255, 51, 51, 0.8)",
+            "Zwischenmessung": "rgba(170, 85, 255, 0.8)"
+        };
 
-        // Legende einmalig hinzufügen
-        const legend = document.createElement("div");
-        legend.className = "legend";
-        legend.innerHTML = `
-            <div><div class="box" style="background:#00aaff"></div> Frühstück</div>
-            <div><div class="box" style="background:#00cc44"></div> Mittag</div>
-            <div><div class="box" style="background:#ff9900"></div> Abend</div>
-            <div><div class="box" style="background:#ff3333"></div> Schlafen</div>
-            <div><div class="box" style="background:#aa55ff"></div> Zwischen</div>
-        `;
-        output.appendChild(legend);
 
-        for (let weekKey of sortedWeeksKeys) {
+        for (const weekKey of sortedWeeksKeys) {
             const data = weeks[weekKey];
+            const { dayAverages, weekAverage } = calculateAverages(data);
+
+            // Daten für Chart.js vorbereiten
+            const chartData = {
+                labels: [], // TT.MM.JJJJ
+                datasets: [
+                    {
+                        label: 'Werte',
+                        data: [], // Enthält {x: datum, y: wert, type: typ}
+                        backgroundColor: [],
+                        type: 'bar',
+                        barPercentage: 0.8,
+                        categoryPercentage: 0.8,
+                    },
+                    {
+                        label: 'Tagesdurchschnitt',
+                        data: [],
+                        borderColor: 'rgba(75, 192, 192, 1)',
+                        borderWidth: 2,
+                        fill: false,
+                        type: 'line',
+                        pointRadius: 0,
+                    },
+                    {
+                        label: `Wochendurchschnitt (${weekAverage.toFixed(0)})`,
+                        data: Array(data.length).fill(weekAverage),
+                        borderColor: 'rgba(255, 99, 132, 1)',
+                        borderWidth: 2,
+                        fill: false,
+                        type: 'line',
+                        pointRadius: 0,
+                    }
+                ]
+            };
+
+            // Sortieren nach Datum für korrekte X-Achse Reihenfolge
+            data.sort((a, b) => dateToISO(a.date) - dateToISO(b.date));
+
+            data.forEach(entry => {
+                chartData.labels.push(entry.date + ' (' + entry.type + ')'); // Label mit Datum und Typ
+                chartData.datasets[0].data.push(entry.value);
+                chartData.datasets[0].backgroundColor.push(typeColors[entry.type]);
+                chartData.datasets[1].data.push(dayAverages[entry.date]);
+            });
+
+
+            // --- DOM Erstellung ---
             const page = document.createElement("div");
             page.className = "page";
+            const header = document.createElement("h2");
+            header.textContent = `Woche: ${weekKey}`;
+            page.appendChild(header);
+
+            const container = document.createElement("div");
+            container.className = "chart-container";
             const canvas = document.createElement("canvas");
-            // Hohe Auflösung für den Export
-            canvas.width = 3840; 
-            canvas.height = 1600;
-            drawChart(canvas, data, weekKey);
-            page.appendChild(canvas);
+            container.appendChild(canvas);
+            page.appendChild(container);
             output.appendChild(page);
+
+            // --- Chart.js Initialisierung ---
+            new Chart(canvas, {
+                type: 'bar',
+                data: chartData,
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            min: 40,
+                            max: 180, // Habe das Maximum etwas erhöht für bessere Skalierung
+                            title: {
+                                display: true,
+                                text: 'Glukosewert (mg/dL)'
+                            }
+                        },
+                        x: {
+                            // Achsenbeschriftung ist das Datum + Typ
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: true
+                        },
+                        title: {
+                            display: true,
+                            text: `Blutzuckerwerte ${weekKey}`
+                        }
+                    }
+                }
+            });
         }
-    }
-
-    /* ---------------------------------------------------------
-       PDF EXPORT
-    ------------------------------------------------------------*/
-
-    async function exportToPdf() {
-        document.getElementById("generateBtn").style.display = 'none';
-        document.getElementById("exportPdfBtn").style.display = 'none';
-        
-        const pdf = new jsPDF('portrait', 'mm', 'a4');
-        const pages = document.querySelectorAll('.page');
-
-        for (let i = 0; i < pages.length; i++) {
-            const page = pages[i];
-            const canvas = await html2canvas(page, { scale: 2, useCORS: true, logging: false });
-            
-            const imgData = canvas.toDataURL('image/png');
-            const pdfWidth = pdf.internal.pageSize.getWidth();
-            const pdfHeight = pdf.internal.pageSize.getHeight();
-            const imgWidth = pdfWidth - 20;
-            const imgHeight = (canvas.height * imgWidth) / canvas.width;
-
-            if (i > 0) {
-                pdf.addPage();
-            }
-
-            pdf.addImage(imgData, 'PNG', 10, 10, imgWidth, imgHeight);
-        }
-
-        pdf.save("Glukose-Diagramme.pdf");
-
-        document.getElementById("generateBtn").style.display = 'block';
-        document.getElementById("exportPdfBtn").style.display = 'block';
     }
 </script>
 </body>
