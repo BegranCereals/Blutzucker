@@ -3,7 +3,6 @@
 <head>
 <meta charset="UTF-8" />
 <title>Glukose Diagramm Generator</title>
-
 <style>
     body {
         font-family: Arial, sans-serif;
@@ -25,26 +24,40 @@
         color: #000;
         border: 1px solid #999;
         padding: 10px;
+        box-sizing: border-box;
     }
 
     button {
         padding: 12px;
         margin-top: 10px;
-        background: #4CAF50;
         border: none;
         color: white;
         font-size: 16px;
         cursor: pointer;
         width: 100%;
+        margin-bottom: 10px;
+    }
+    
+    #generateBtn {
+        background: #4CAF50;
     }
 
-    button:hover {
+    #generateBtn:hover {
         background: #45A049;
+    }
+
+    #exportPdfBtn {
+        background: #007bff;
+        display: none; /* Initially hidden */
+    }
+
+    #exportPdfBtn:hover {
+        background: #0056b3;
     }
 
     canvas {
         margin-top: 20px;
-        width: 100%;
+        width: 100%; /* Makes the canvas responsive in the browser view */
         border: 1px solid #ccc;
         background: #ffffff;
     }
@@ -52,6 +65,9 @@
     .page {
         page-break-after: always;
         margin-bottom: 50px;
+        background: #fff;
+        padding: 20px;
+        box-shadow: 0 0 10px rgba(0,0,0,0.1);
     }
 
     .legend {
@@ -83,197 +99,295 @@
 
 <p>Daten einfügen:</p>
 <textarea id="input"></textarea>
-<button onclick="generate()">Diagramme erzeugen</button>
+<button id="generateBtn" onclick="generate()">Diagramme erzeugen</button>
+<button id="exportPdfBtn" onclick="exportToPdf()">Als PDF exportieren</button>
 
 <div id="output"></div>
 
+<!-- Bibliotheken für PDF-Export -->
+<script src="cdnjs.cloudflare.com"></script>
+<script src="cdnjs.cloudflare.com"></script>
+
 <script>
-/* ---------------------------------------------------------
-   DATEN PARSEN
-------------------------------------------------------------*/
+    // Zugriff auf jsPDF global in diesem Skript
+    const { jsPDF } = window.jspdf;
 
-function parseData(text) {
-    const lines = text.split("\n").map(l => l.trim());
-    const entries = [];
-    let currentDate = null;
+    /* ---------------------------------------------------------
+       BEISPIELDATEN (Für schnelles Testen)
+    ------------------------------------------------------------*/
+    document.getElementById("input").value = `
+01.12.2025
+Frühstück: 110
+Mittagessen: 145
+Abendessen: 130
+Schlafen: 120
 
-    const typeColors = {
-        "Frühstück": "#00aaff",
-        "Mittagessen": "#00cc44",
-        "Abendessen": "#ff9900",
-        "Schlafen": "#ff3333",
-        "Zwischenmessung": "#aa55ff"
-    };
+02.12.2025
+Frühstück: 105
+Mittagessen: 155
+Abendessen: 140
+Schlafen: 115
 
-    for (let line of lines) {
-        if (line.match(/^\d{1,2}\.\d{1,2}\.\d{4}$/)) {
-            currentDate = line;
-            continue;
+03.12.2025
+Frühstück: 98
+Mittagessen: 135
+Abendessen: 125
+Schlafen: 100
+
+04.12.2025
+Frühstück: 120
+Mittagessen: 160
+Abendessen: 135
+Schlafen: 110
+
+05.12.2025
+Frühstück: 115
+Mittagessen: 142
+Abendessen: 128
+Schlafen: 105
+`;
+
+
+    /* ---------------------------------------------------------
+       DATEN PARSEN
+    ------------------------------------------------------------*/
+
+    function parseData(text) {
+        const lines = text.split("\n").map(l => l.trim()).filter(l => l.length > 0);
+        const entries = [];
+        let currentDate = null;
+
+        const typeColors = {
+            "Frühstück": "#00aaff",
+            "Mittagessen": "#00cc44",
+            "Abendessen": "#ff9900",
+            "Schlafen": "#ff3333",
+            "Zwischenmessung": "#aa55ff"
+        };
+
+        for (let line of lines) {
+            // Prüfen ob die Zeile ein Datum im Format TT.MM.JJJJ ist
+            if (line.match(/^\d{1,2}\.\d{1,2}\.\d{4}$/)) {
+                currentDate = line;
+                continue;
+            }
+
+            // Prüfen ob die Zeile einen Wert enthält
+            const m = line.match(/(Frühstück|Mittagessen|Abendessen|Schlafen|Zwischenmessung).*?(\d+)\s*$/);
+            if (m && currentDate) {
+                entries.push({
+                    date: currentDate,
+                    type: m[1],
+                    value: parseInt(m[2]),
+                    color: typeColors[m[1]]
+                });
+            }
+        }
+        return entries;
+    }
+
+    /* ---------------------------------------------------------
+       NACH KALENDERWOCHE GRUPPIEREN
+    ------------------------------------------------------------*/
+
+    function dateToISO(d) {
+        const [day, month, year] = d.split(".");
+        // JS Monate sind 0-basiert
+        return new Date(year, month - 1, day);
+    }
+
+    function getWeekNumber(date) {
+        const d = new Date(date.getTime());
+        d.setHours(0,0,0,0);
+        // ISO week date calculation (Monday as first day of week)
+        d.setDate(d.getDate() + 3 - (d.getDay() + 6) % 7);
+        const week1 = new Date(d.getFullYear(), 0, 4);
+        return 1 + Math.round(((d.getTime() - week1.getTime()) / 86400000 - 3 + (week1.getDay() + 6) % 7) / 7);
+    }
+
+    function groupByWeek(entries) {
+        const map = {};
+
+        for (let e of entries) {
+            const iso = dateToISO(e.date);
+            const year = iso.getFullYear();
+            const week = getWeekNumber(iso);
+            const key = `${year}-KW${week}`;
+
+            if (!map[key]) map[key] = [];
+            map[key].push(e);
         }
 
-        const m = line.match(/(Frühstück|Mittagessen|Abendessen|Schlafen|Zwischenmessung).*?(\d+)\s*$/);
-        if (m && currentDate) {
-            entries.push({
-                date: currentDate,
-                type: m[1],
-                value: parseInt(m[2]),
-                color: typeColors[m[1]]
-            });
+        return map;
+    }
+
+    /* ---------------------------------------------------------
+       ZEICHNEN
+    ------------------------------------------------------------*/
+
+    function drawChart(canvas, weekData, title) {
+        const ctx = canvas.getContext("2d");
+        const W = canvas.width;
+        const H = canvas.height;
+
+        ctx.fillStyle = "#fff";
+        ctx.fillRect(0,0,W,H);
+
+        const uniqueDays = [...new Set(weekData.map(e => e.date))].sort((a, b) => dateToISO(a) - dateToISO(b));
+
+        // Maxwert für Skalierung (min 180 für gute Skala)
+        const maxValue = Math.max(...weekData.map(e => e.value), 180); 
+        const maxBarHeight = H - 140;
+
+        const startX = 80;
+        let x = startX;
+        const barWidth = 30; // Etwas breiter für bessere Sichtbarkeit
+        const dayGap = 20; // Abstand zwischen den Tagen
+
+        // Orientierungslinien und Y-Achse Beschriftung
+        ctx.strokeStyle = "rgba(0,0,0,0.15)";
+        ctx.fillStyle = "#555";
+        ctx.font = "20px Arial";
+        const numLines = 6;
+        for (let i = 0; i < numLines; i++) {
+            const y = 60 + i * (maxBarHeight / (numLines - 1));
+            ctx.beginPath();
+            ctx.moveTo(60, y);
+            ctx.lineTo(W - 40, y);
+            ctx.stroke();
+            
+            const value = maxValue * (1 - i / (numLines - 1));
+            ctx.fillText(Math.round(value), 10, y + 5);
         }
-    }
-    return entries;
-}
 
-/* ---------------------------------------------------------
-   NACH KALENDERWOCHE GRUPPIEREN
-------------------------------------------------------------*/
-
-function dateToISO(d) {
-    const [day, month, year] = d.split(".");
-    return new Date(`${year}-${month}-${day}`);
-}
-
-function getWeekNumber(date) {
-    const d = new Date(date.getTime());
-    d.setHours(0,0,0,0);
-    d.setDate(d.getDate() + 4 - (d.getDay() || 7));
-    const yearStart = new Date(d.getFullYear(), 0, 1);
-    return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
-}
-
-function groupByWeek(entries) {
-    const map = {};
-
-    for (let e of entries) {
-        const iso = dateToISO(e.date);
-        const year = iso.getFullYear();
-        const week = getWeekNumber(iso);
-        const key = `${year}-KW${week}`;
-
-        if (!map[key]) map[key] = [];
-        map[key].push(e);
-    }
-
-    return map;
-}
-
-/* ---------------------------------------------------------
-   ZEICHNEN
-------------------------------------------------------------*/
-
-function avg(arr) {
-    return arr.reduce((a,b)=>a+b,0) / arr.length;
-}
-
-function drawChart(canvas, weekData, title, startDate, endDate) {
-    const ctx = canvas.getContext("2d");
-    const W = canvas.width;
-    const H = canvas.height;
-
-    ctx.fillStyle = "#fff";
-    ctx.fillRect(0,0,W,H);
-
-    const uniqueDays = [...new Set(weekData.map(e => e.date))];
-
-    const maxValue = Math.max(...weekData.map(e => e.value), 160);
-    const maxBarHeight = H - 140;
-
-    let x = 80;
-    const barWidth = 18;
-    const barGap = 10;
-
-    // Orientierungslinien
-    ctx.strokeStyle = "rgba(0,0,0,0.15)";
-    for (let i = 0; i < 6; i++) {
-        const y = 60 + i * ((H-140)/5);
-        ctx.beginPath();
-        ctx.moveTo(60, y);
-        ctx.lineTo(W - 40, y);
-        ctx.stroke();
-    }
-
-    // Titel
-    ctx.fillStyle = "#000";
-    ctx.font = "24px Arial";
-    ctx.fillText(title, 70, 40);
-
-    ctx.font = "14px Arial";
-
-    for (let day of uniqueDays) {
-        const dayEntries = weekData.filter(e => e.date === day);
-
-        // Datum unter Balken
-        ctx.save();
-        ctx.translate(x, H - 50);
-        ctx.rotate(-Math.PI/2);
+        // Titel
         ctx.fillStyle = "#000";
-        ctx.fillText(day, 0, 0);
-        ctx.restore();
+        ctx.font = "32px Arial";
+        ctx.fillText(title, startX, 50);
 
-        for (let e of dayEntries) {
-            const h = (e.value / maxValue) * maxBarHeight;
+        ctx.font = "18px Arial";
 
-            ctx.fillStyle = e.color;
-            ctx.fillRect(x, (H - 80) - h, barWidth, h);
-
+        for (let day of uniqueDays) {
+            const dayEntries = weekData.filter(e => e.date === day);
+            
+            // Datum unter Balken zentriert
+            ctx.save();
+            ctx.translate(x + (barWidth * dayEntries.length / 2), H - 55);
+            ctx.rotate(-Math.PI/2);
             ctx.fillStyle = "#000";
-            ctx.fillText(e.value, x, (H - 85) - h);
+            ctx.fillText(day, 0, 0);
+            ctx.restore();
 
-            x += barWidth + barGap;
+            for (let e of dayEntries) {
+                const h = (e.value / maxValue) * maxBarHeight;
+                const yPos = (H - 80) - h;
+
+                // Balken zeichnen
+                ctx.fillStyle = e.color;
+                ctx.fillRect(x, yPos, barWidth, h);
+
+                // Wert über Balken schreiben
+                ctx.fillStyle = "#000";
+                ctx.fillText(e.value, x, yPos - 5);
+
+                x += barWidth;
+            }
+            // Abstand zwischen den Tagen
+            x += dayGap;
         }
     }
-}
 
-/* ---------------------------------------------------------
-   GENERIEREN
-------------------------------------------------------------*/
+    /* ---------------------------------------------------------
+       GENERIEREN
+    ------------------------------------------------------------*/
 
-function generate() {
-    const text = document.getElementById("input").value;
-    if (!text.trim()) return;
+    function generate() {
+        const text = document.getElementById("input").value;
+        if (!text.trim()) return;
 
-    const output = document.getElementById("output");
-    output.innerHTML = "";
+        const output = document.getElementById("output");
+        output.innerHTML = "";
+        document.getElementById("exportPdfBtn").style.display = 'block';
 
-    const entries = parseData(text);
-    const weeks = groupByWeek(entries);
+        const entries = parseData(text);
+        if (entries.length === 0) {
+            output.innerHTML = "<p>Keine gültigen Daten gefunden.</p>";
+            return;
+        }
+        
+        const weeks = groupByWeek(entries);
+        const sortedWeeksKeys = Object.keys(weeks).sort();
 
-    // Legende
-    const legend = document.createElement("div");
-    legend.className = "legend";
-    legend.innerHTML = `
-        <div><div class="box" style="background:#00aaff"></div> Frühstück</div>
-        <div><div class="box" style="background:#00cc44"></div> Mittag</div>
-        <div><div class="box" style="background:#ff9900"></div> Abend</div>
-        <div><div class="box" style="background:#ff3333"></div> Schlafen</div>
-        <div><div class="box" style="background:#aa55ff"></div> Zwischen</div>
-    `;
-    output.appendChild(legend);
+        // Legende einmalig hinzufügen
+        const legend = document.createElement("div");
+        legend.className = "legend";
+        legend.innerHTML = `
+            <div><div class="box" style="background:#00aaff"></div> Frühstück</div>
+            <div><div class="box" style="background:#00cc44"></div> Mittag</div>
+            <div><div class="box" style="background:#ff9900"></div> Abend</div>
+            <div><div class="box" style="background:#ff3333"></div> Schlafen</div>
+            <div><div class="box" style="background:#aa55ff"></div> Zwischen</div>
+        `;
+        output.appendChild(legend);
 
-    for (let week in weeks) {
-        const data = weeks[week];
+        for (let weekKey of sortedWeeksKeys) {
+            const data = weeks[weekKey];
 
-        const sorted = data.slice().sort((a,b)=>dateToISO(a.date)-dateToISO(b.date));
-        const start = sorted[0].date;
-        const end = sorted[sorted.length-1].date;
+            // Daten innerhalb der Woche nach Datum sortieren
+            const sorted = data.slice().sort((a,b)=>dateToISO(a.date)-dateToISO(b.date));
+            
+            const page = document.createElement("div");
+            page.className = "page";
 
-        const page = document.createElement("div");
-        page.className = "page";
+            const canvas = document.createElement("canvas");
+            // Setzen Sie eine hohe Auflösung für den Export (z.B. 4K Breite)
+            canvas.width = 3840; 
+            canvas.height = 1600;
 
-        const header = document.createElement("h2");
-        header.textContent = `${week} – ${start} bis ${end}`;
-        page.appendChild(header);
+            drawChart(canvas, sorted, weekKey);
+            page.appendChild(canvas);
 
-        const canvas = document.createElement("canvas");
-        canvas.width = 1800;
-        canvas.height = 900;
-
-        drawChart(canvas, sorted, week, start, end);
-        page.appendChild(canvas);
-
-        output.appendChild(page);
+            output.appendChild(page);
+        }
     }
-}
+
+    /* ---------------------------------------------------------
+       PDF EXPORT
+    ------------------------------------------------------------*/
+
+    async function exportToPdf() {
+        // Hide buttons during processing to avoid interference with html2canvas
+        document.getElementById("generateBtn").style.display = 'none';
+        document.getElementById("exportPdfBtn").style.display = 'none';
+        
+        const pdf = new jsPDF('portrait', 'mm', 'a4');
+        const pages = document.querySelectorAll('.page');
+
+        for (let i = 0; i < pages.length; i++) {
+            const page = pages[i];
+            // Render the whole page div including title and canvas
+            const canvas = await html2canvas(page, { scale: 2, useCORS: true, logging: false });
+            
+            const imgData = canvas.toDataURL('image/png');
+            // A4 dimensions in mm: 210 x 297
+            const pdfWidth = pdf.internal.pageSize.getWidth();
+            const pdfHeight = pdf.internal.pageSize.getHeight();
+            const imgWidth = pdfWidth - 20; // 10mm margin on each side
+            const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+            if (i > 0) {
+                pdf.addPage();
+            }
+
+            pdf.addImage(imgData, 'PNG', 10, 10, imgWidth, imgHeight);
+        }
+
+        pdf.save("Glukose-Diagramme.pdf");
+
+        // Show buttons again
+        document.getElementById("generateBtn").style.display = 'block';
+        document.getElementById("exportPdfBtn").style.display = 'block';
+    }
 </script>
 </body>
 </html>
