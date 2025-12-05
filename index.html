@@ -1,291 +1,502 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="de">
 <head>
-<meta charset="UTF-8" />
-<title>Glukose Diagramm – Monatsansicht</title>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Glukose Wochen-Reports (4-Wochen A4)</title>
+
+<!-- CDN für PDF-Export -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
 <style>
-    body {
-        font-family: Arial, sans-serif;
-        background: #f2f2f2;
-        padding: 20px;
-        color: #222;
-    }
+  :root{
+    --bg:#ffffff; --text:#111;
+    --cF:#00c8ff; --cM:#30cc66; --cA:#ffb53a; --cS:#ff5252; --cZ:#9b6cff;
+    --pageW:794px; /* A4 portrait px at 96dpi ~ 794 x 1123 */
+  }
+  html,body{margin:0;padding:18px;font-family:system-ui,Arial;color:var(--text);background:#f3f3f3}
+  h1{margin:0 0 8px 0;font-size:20px}
+  .controls{display:flex;gap:10px;align-items:center;margin:8px 0 14px 0;flex-wrap:wrap}
+  textarea{width:100%;height:220px;padding:10px;border:1px solid #ccc;font-size:14px;box-sizing:border-box}
+  button{padding:10px 12px;background:#1976d2;color:#fff;border:none;border-radius:6px;cursor:pointer}
+  button[disabled]{opacity:0.5;cursor:not-allowed}
+  #container{max-width:980px;margin:16px auto}
+  /* Page (one month) */
+  .month-page{width:var(--pageW);background:#fff;margin:18px auto;padding:12px;border:1px solid #ddd;box-shadow:0 8px 18px rgba(0,0,0,0.06)}
+  .month-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+  .month-title{font-weight:700;font-size:18px}
+  .month-meta{font-size:13px;color:#333}
+  .legend{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:8px}
+  .legend .item{display:flex;gap:6px;align-items:center;font-size:13px}
+  .legend .swatch{width:14px;height:12px;border-radius:2px}
 
-    textarea {
-        width: 100%;
-        height: 200px;
-        font-size: 14px;
-        margin-bottom: 15px;
-    }
+  /* weeks stacked vertical (4 per page ideally) */
+  .week-block{border-top:1px solid #eee;padding-top:10px;margin-top:10px}
+  .week-title{font-weight:600;margin-bottom:6px;font-size:14px}
+  .week-canvas{width:100%;height:auto;border:1px solid #e6e6e6;background:#fff;display:block}
 
-    button {
-        width: 100%;
-        padding: 14px;
-        font-size: 18px;
-        background: #4CAF50;
-        color: white;
-        border: none;
-        cursor: pointer;
-        margin-bottom: 25px;
-    }
+  /* small avg box */
+  .avg-box{margin-top:8px;font-size:13px;color:#222}
 
-    button:hover {
-        background: #45a049;
-    }
-
-    .page {
-        background: white;
-        border: 1px solid #ccc;
-        padding: 20px;
-        margin-bottom: 60px;
-        page-break-after: always;
-    }
-
-    .month-title {
-        font-size: 30px;
-        margin-bottom: 10px;
-    }
-
-    .legend {
-        display: flex;
-        gap: 15px;
-        margin-bottom: 20px;
-        padding: 10px;
-        background: #fff;
-        border: 1px solid #ccc;
-        font-size: 14px;
-    }
-
-    .legend div {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-    }
-
-    .box { width: 14px; height: 14px; }
-
-    .calendar {
-        display: grid;
-        grid-template-columns: repeat(7, 1fr);
-        gap: 12px;
-    }
-
-    .daycell {
-        border: 1px solid #ddd;
-        height: 220px;
-        padding: 4px;
-        position: relative;
-        background: #fafafa;
-    }
-
-    .daynum {
-        position: absolute;
-        top: 4px;
-        right: 6px;
-        font-size: 13px;
-        font-weight: bold;
-    }
-
-    .avgbox {
-        margin-top: 15px;
-        padding: 8px;
-        border: 1px solid #ccc;
-        background: #fff;
-    }
-
+  /* Printing */
+  @media print{
+    body{background:#fff}
+    .month-page{box-shadow:none;border:none;margin:0;padding:6mm}
+    .controls, #downloadNote{display:none}
+  }
 </style>
 </head>
 <body>
+<div id="container">
+  <h1>Glukose-Wochenreport — 4 Diagramme / A4 (vertikal)</h1>
 
-<h1>Glukose Monatsgenerator</h1>
+  <div class="controls">
+    <div style="flex:1">
+      <textarea id="inputText" placeholder="Hier deinen Text einfügen (Datum: TT.MM.JJJJ, Zeilen mit Frühstück/Mittag/Abend/Schlafen/Zwischenmessung + Zahl)."></textarea>
+    </div>
+  </div>
 
-<textarea id="input"></textarea>
-<button onclick="generate()">Diagramme erzeugen</button>
+  <div style="display:flex;gap:8px;margin-bottom:12px">
+    <button id="btnGenerate">Diagramme erzeugen</button>
+    <button id="btnExport" disabled>PDF exportieren</button>
+    <button id="btnClear">Leeren</button>
+  </div>
 
-<div id="output"></div>
+  <div id="pagesContainer"></div>
+
+  <div id="downloadNote" style="margin-top:12px;color:#444;font-size:13px">
+    Tipp: Verwende Chrome/Firefox für stabilen PDF-Export. PDF-Generierung öffnet den Druckdialog.
+  </div>
+</div>
 
 <script>
-/* Farben pro Messart */
-const COLORS = {
-  "Frühstück": "#00aaff",
-  "Mittagessen": "#00cc44",
-  "Abendessen": "#ff9900",
-  "Schlafen": "#ff3333",
-  "Zwischenmessung": "#aa55ff"
-};
+/* ---------- Parser (robust) ---------- */
+function parseText(text){
+  const lines = text.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
+  const dateRe = /^\d{1,2}\.\d{1,2}\.\d{4}$/;
+  const entriesByDate = {}; // dateStr => array of {type, value}
 
-/* Parsing */
-function parseData(text) {
-  const lines = text.split("\n").map(l => l.trim());
-  const out = [];
   let curDate = null;
-
-  for (let line of lines) {
-    if (line.match(/^\d{1,2}\.\d{1,2}\.\d{4}$/)) {
-      curDate = line;
+  for(let raw of lines){
+    // detect date-only line
+    if(dateRe.test(raw)){
+      curDate = raw;
+      if(!entriesByDate[curDate]) entriesByDate[curDate]=[];
       continue;
     }
+    if(!curDate) continue;
 
-    const m = line.match(/(Frühstück|Mittagessen|Abendessen|Schlafen|Zwischenmessung).*?(\d+)\s*$/);
-    if (m && curDate) {
-      out.push({
-        date: curDate,
-        type: m[1],
-        value: parseInt(m[2]),
-        color: COLORS[m[1]]
-      });
+    // look for measurement lines
+    // possible types: Frühstück, Frühstück:, Fruehstueck, Mittagessen, Abendessen, Schlafen, Zwischenmessung, Zwischen
+    const low = raw.toLowerCase();
+    // find last number in line
+    const numMatch = raw.match(/(\d{2,3})(?!.*\d)/);
+    const value = numMatch ? parseInt(numMatch[1],10) : null;
+    if(value===null) continue;
+
+    let type = null;
+    if(/fr(ü|ue)h|früh/i.test(raw)) type='Frühstück';
+    else if(/mittag/i.test(raw)) type='Mittagessen';
+    else if(/abend/i.test(raw)) type='Abendessen';
+    else if(/schlaf/i.test(raw)) type='Schlafen';
+    else if(/zwischen|messung/i.test(raw)) type='Zwischenmessung';
+    else {
+      // fallback: try to infer by position if line contains "Frühstück" words etc.
+      // if not recognized, label as Zwischen
+      type='Zwischenmessung';
     }
+    entriesByDate[curDate].push({type, value});
   }
 
-  return out;
+  // Build array of days
+  const days = [];
+  for(const dateStr of Object.keys(entriesByDate)){
+    const arr = entriesByDate[dateStr];
+    // group by canonical types F,M,A,S,Z (allow multiple Z)
+    const day = {date: dateStr, F:[], M:[], A:[], S:[], Z:[]};
+    arr.forEach(it=>{
+      if(it.type==='Frühstück') day.F.push(it.value);
+      else if(it.type==='Mittagessen') day.M.push(it.value);
+      else if(it.type==='Abendessen') day.A.push(it.value);
+      else if(it.type==='Schlafen') day.S.push(it.value);
+      else day.Z.push(it.value);
+    });
+    days.push(day);
+  }
+
+  // sort by date ascending
+  days.sort((a,b)=> {
+    const pa = a.date.split('.').map(Number);
+    const pb = b.date.split('.').map(Number);
+    const da = new Date(pa[2], pa[1]-1, pa[0]);
+    const db = new Date(pb[2], pb[1]-1, pb[0]);
+    return da - db;
+  });
+
+  return days;
 }
 
-/* Date helpers */
-function toISO(d) {
-  const [day,month,year] = d.split(".");
-  return new Date(year, month-1, day);
+/* ---------- Helpers ---------- */
+function toDateObj(dateStr){
+  const p = dateStr.split('.').map(Number);
+  return new Date(p[2], p[1]-1, p[0]);
+}
+function isoWeek(date){
+  // returns {year, week}
+  const tmp = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  tmp.setUTCDate(tmp.getUTCDate() + 4 - (tmp.getUTCDay()||7));
+  const yearStart = new Date(Date.UTC(tmp.getUTCFullYear(),0,1));
+  const weekNo = Math.ceil((((tmp - yearStart)/86400000)+1)/7);
+  return {year: tmp.getUTCFullYear(), week: weekNo};
 }
 
-/* Gruppieren nach Monat */
-function groupByMonth(entries) {
+function groupByMonth(days){
   const map = {};
-  for (let e of entries) {
-    const d = toISO(e.date);
-    const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;
-    if (!map[key]) map[key] = [];
-    map[key].push(e);
-  }
+  days.forEach(d=>{
+    const dt = toDateObj(d.date);
+    const key = `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}`;
+    if(!map[key]) map[key]=[];
+    map[key].push(d);
+  });
+  // ensure days sorted inside each month
+  Object.keys(map).forEach(k=> map[k].sort((a,b)=>toDateObj(a.date)-toDateObj(b.date)));
   return map;
 }
 
-/* Durchschnitt */
-function avg(arr) {
-  if (!arr.length) return 0;
-  return Math.round(arr.reduce((a,b)=>a+b,0)/arr.length);
+/* group days of a month into ISO weeks */
+function groupMonthIntoWeeks(days){
+  const weeks = {}; // key = year-Www
+  days.forEach(d=>{
+    const info = isoWeek(toDateObj(d.date));
+    const key = `${info.year}-W${String(info.week).padStart(2,'0')}`;
+    if(!weeks[key]) weeks[key] = {year:info.year, week:info.week, days:[]};
+    weeks[key].days.push(d);
+  });
+  // sort weeks by first day
+  return Object.values(weeks).sort((a,b)=> toDateObj(a.days[0].date) - toDateObj(b.days[0].date));
 }
 
-/* Zeichnet Balken in ein Tagesfeld */
-function drawBars(cell, dayEntries) {
-  const canvas = document.createElement("canvas");
-  canvas.width = 180;
-  canvas.height = 160;
-  canvas.style.width = "100%";
-  const ctx = canvas.getContext("2d");
+/* ---------- Drawing one week chart on canvas ---------- */
+function drawWeekCanvas(weekObj, opts){
+  // opts: widthCss, heightCss, barWidth
+  const days = weekObj.days;
+  const widthCss = opts.width || 760;
+  const heightCss = opts.height || 240;
+  const scale = window.devicePixelRatio || 2;
+  const canvas = document.createElement('canvas');
+  canvas.className = 'week-canvas';
+  canvas.width = Math.round(widthCss * scale);
+  canvas.height = Math.round(heightCss * scale);
+  canvas.style.width = widthCss + 'px';
+  canvas.style.height = heightCss + 'px';
+  const ctx = canvas.getContext('2d');
+  ctx.scale(scale, scale);
 
-  const maxVal = Math.max(160, ...dayEntries.map(e=>e.value));
-  const barWidth = 18;
-  const gap = 6;
-  let x = 10;
-  const baseY = 150;
+  // white background (fixed)
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0,0,widthCss,heightCss);
 
-  for (let e of dayEntries) {
-    let h = (e.value / maxVal) * 120;
-    ctx.fillStyle = e.color;
-    ctx.fillRect(x, baseY - h, barWidth, h);
+  const pad = {left:68,right:20,top:36,bottom:56};
+  const innerW = widthCss - pad.left - pad.right;
+  const innerH = heightCss - pad.top - pad.bottom;
 
-    ctx.strokeStyle = "white";
-    ctx.lineWidth = 1;
-    ctx.strokeRect(x, baseY - h, barWidth, h);
+  // collect all numerical values to determine y scale
+  const vals = [];
+  days.forEach(d=>{
+    [...d.F, ...d.M, ...d.A, ...d.S, ...d.Z].forEach(v=> vals.push(v));
+  });
+  const maxVal = vals.length ? Math.max(...vals) : 200;
+  const yMax = Math.ceil(maxVal/10)*10 || 200;
 
-    ctx.fillStyle = "black";
-    ctx.font = "12px Arial";
-    ctx.fillText(e.value, x, baseY - h - 5);
-
-    x += barWidth + gap;
+  // horizontal gridlines (5)
+  ctx.strokeStyle = 'rgba(0,0,0,0.12)';
+  ctx.lineWidth = 1;
+  ctx.font = '12px Arial';
+  for(let i=0;i<=5;i++){
+    const t = i/5;
+    const y = pad.top + innerH * t;
+    ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(widthCss - pad.right, y); ctx.stroke();
+    const val = Math.round(yMax - yMax * t);
+    ctx.fillStyle = '#000';
+    ctx.fillText(String(val), 10, y+4);
   }
 
-  cell.appendChild(canvas);
-}
+  // draw bars: for each day, stacked group of bars (thin)
+  const n = days.length;
+  const step = innerW / Math.max(n,1);
+  const barWidth = opts.barWidth || 8;
+  const spacing = 6; // between groups/day
 
-/* Hauptgenerator */
-function generate() {
-  const text = document.getElementById("input").value.trim();
-  const out = document.getElementById("output");
-  out.innerHTML = "";
-  if (!text) return;
+  const colorMap = {
+    F: getComputedStyle(document.documentElement).getPropertyValue('--cF') || '#00aaff',
+    M: getComputedStyle(document.documentElement).getPropertyValue('--cM') || '#30cc66',
+    A: getComputedStyle(document.documentElement).getPropertyValue('--cA') || '#ffb53a',
+    S: getComputedStyle(document.documentElement).getPropertyValue('--cS') || '#ff5252',
+    Z: getComputedStyle(document.documentElement).getPropertyValue('--cZ') || '#9b6cff'
+  };
 
-  const entries = parseData(text)
-    .sort((a,b)=>toISO(a.date)-toISO(b.date));
+  // offsets within group so bars don't overlap
+  const order = ['F','M','A','S','Z'];
+  const groupWidth = order.length * (barWidth + 3);
 
-  const months = groupByMonth(entries);
+  for(let i=0;i<n;i++){
+    const d = days[i];
+    const cx = pad.left + step*(i + 0.5);
+    // starting x for the group
+    let startX = cx - groupWidth/2;
 
-  /* Legende */
-  const legend = document.createElement("div");
-  legend.className = "legend";
-  legend.innerHTML = `
-    <div><div class="box" style="background:#00aaff"></div> Frühstück</div>
-    <div><div class="box" style="background:#00cc44"></div> Mittagessen</div>
-    <div><div class="box" style="background:#ff9900"></div> Abendessen</div>
-    <div><div class="box" style="background:#ff3333"></div> Schlafen</div>
-    <div><div class="box" style="background:#aa55ff"></div> Zwischenmessung</div>
-  `;
-  out.appendChild(legend);
+    // draw each type (F,M,A,S,Z) as separate thin bar next to each other;
+    order.forEach(type=>{
+      const arr = (type==='F'?d.F:type==='M'?d.M:type==='A'?d.A:type==='S'?d.S:d.Z);
+      if(arr && arr.length){
+        // if multiple values (e.g., several Zwischenmessungen) draw multiple small bars or avg
+        // we'll draw one bar per measurement within that type, stacked horizontally
+        for(let vi=0; vi<arr.length; vi++){
+          const v = arr[vi];
+          const h = (v / yMax) * innerH;
+          const x = startX + vi*(barWidth+2);
+          const y = pad.top + innerH - h;
+          ctx.fillStyle = colorMap[type];
+          ctx.fillRect(x, y, barWidth, h);
 
-  for (let monthKey in months) {
-    const monthEntries = months[monthKey];
-    const page = document.createElement("div");
-    page.className = "page";
+          // small white stroke for separation
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 1;
+          ctx.strokeRect(x, y, barWidth, h);
 
-    /* Titel */
-    const mdate = toISO(monthEntries[0].date);
-    const monthName = mdate.toLocaleString("de-DE",{month:"long"});
-    const title = document.createElement("div");
-    title.className = "month-title";
-    title.textContent = `${monthName} ${mdate.getFullYear()}`;
-    page.appendChild(title);
-
-    /* Kalendergitter */
-    const grid = document.createElement("div");
-    grid.className = "calendar";
-
-    /* Tagesfelder generieren */
-    const firstDay = new Date(mdate.getFullYear(), mdate.getMonth(), 1);
-    const lastDay = new Date(mdate.getFullYear(), mdate.getMonth()+1, 0);
-    const startOffset = (firstDay.getDay()+6)%7;  // Mo=0
-
-    /* Leere Felder vor dem Monat */
-    for (let i=0;i<startOffset;i++){
-      const empty = document.createElement("div");
-      empty.className = "daycell";
-      grid.appendChild(empty);
-    }
-
-    /* Jeder Tag des Monats */
-    for (let d=1; d <= lastDay.getDate(); d++) {
-      const cell = document.createElement("div");
-      cell.className = "daycell";
-
-      const label = document.createElement("div");
-      label.className = "daynum";
-      label.textContent = d;
-      cell.appendChild(label);
-
-      const dateStr = `${d}.${mdate.getMonth()+1}.${mdate.getFullYear()}`;
-
-      const dayEntries = monthEntries.filter(e=>e.date===dateStr);
-
-      if (dayEntries.length > 0) {
-        drawBars(cell, dayEntries);
+          // value label above
+          ctx.fillStyle = '#000';
+          ctx.font = '11px Arial';
+          ctx.fillText(String(v), x + barWidth/2 - 6, y - 6);
+        }
       }
+      // move startX for next type by at least barWidth + gap
+      startX += (barWidth + 5) + Math.max(0, (arr?arr.length-1:0)*(barWidth+2));
+    });
 
-      grid.appendChild(cell);
+    // day average: compute avg of all numbers (except between? include all)
+    const allVals = [...d.F, ...d.M, ...d.A, ...d.S]; // exclude Z from day average? user wanted daily average; include all except Z? We'll include F/M/A/S
+    let dayAvg = null;
+    if(allVals.length) dayAvg = Math.round(allVals.reduce((a,b)=>a+b,0)/allVals.length);
+
+    if(dayAvg!==null){
+      const y = pad.top + innerH - (dayAvg / yMax) * innerH;
+      // draw small black dot with white stroke
+      ctx.beginPath(); ctx.arc(cx, y, 4, 0, Math.PI*2); ctx.fillStyle='#000'; ctx.fill(); ctx.lineWidth=1; ctx.strokeStyle='#fff'; ctx.stroke();
+      ctx.fillStyle='#000'; ctx.font='12px Arial'; ctx.fillText(String(dayAvg), cx+8, y+4);
     }
 
-    page.appendChild(grid);
-
-    /* Durchschnittswerte */
-    const vals = monthEntries.map(e=>e.value);
-
-    const avgBox = document.createElement("div");
-    avgBox.className = "avgbox";
-    avgBox.innerHTML = `<b>Monatsdurchschnitt:</b> ${avg(vals)} mg/dl`;
-    page.appendChild(avgBox);
-
-    out.appendChild(page);
+    // vertical date label rotated - but keep it inside canvas to avoid Safari crash
+    ctx.save();
+    ctx.translate(cx - 6, pad.top + innerH + 24);
+    ctx.rotate(-Math.PI/2);
+    ctx.fillStyle = '#000';
+    ctx.font = '12px Arial';
+    ctx.fillText(d.date.slice(0,5), 0, 0);
+    ctx.restore();
   }
-}
-</script>
 
+  return canvas;
+}
+
+/* ---------- Build pages (4 weeks per A4 page vertical) ---------- */
+function buildReportFromText(text){
+  const days = parseText(text);
+  if(!days.length) return {pages:[], start:null, end:null};
+
+  const months = groupByMonth(days);
+  const pages = []; // each page contains monthKey + HTML element (we'll create elements)
+
+  // we will create for each month: weeks grouped, then 4 weeks per A4 page vertically
+  for(const monthKey of Object.keys(months)){
+    const monthDays = months[monthKey];
+    const weeks = groupMonthIntoWeeks(monthDays); // array of week objects (with days[])
+
+    // compute month average (use F/M/A/S only)
+    const allVals = [];
+    monthDays.forEach(d=> { allVals.push(...d.F, ...d.M, ...d.A, ...d.S); });
+    const monthAvg = allVals.length ? Math.round(allVals.reduce((a,b)=>a+b,0)/allVals.length) : null;
+
+    // chunk weeks into blocks of 4 (vertical stack)
+    for(let i=0;i<weeks.length;i+=4){
+      const chunk = weeks.slice(i, i+4); // up to 4 weeks
+      // create DOM for page
+      const pageEl = document.createElement('div');
+      pageEl.className = 'month-page';
+
+      // header
+      const hd = document.createElement('div'); hd.className='month-head';
+      const first = monthDays[0].date; const last = monthDays[monthDays.length-1].date;
+      const title = document.createElement('div'); title.className='month-title';
+      // nice month label
+      const mm = toDateObj(first); const monthLabel = mm.toLocaleString('de-DE',{month:'long', year:'numeric'});
+      title.textContent = `${monthLabel}`;
+      hd.appendChild(title);
+      const meta = document.createElement('div'); meta.className='month-meta';
+      meta.innerHTML = `Monats-Ø: ${monthAvg!==null? monthAvg + ' mg/dL' : 'n/a'} <br> ${first} — ${last}`;
+      hd.appendChild(meta);
+      pageEl.appendChild(hd);
+
+      // legend (once per page)
+      const leg = document.createElement('div'); leg.className='legend';
+      leg.innerHTML = `
+        <div class="item"><span class="swatch" style="background:${getComputedStyle(document.documentElement).getPropertyValue('--cF')||'#00aaff'}"></span> Frühstück</div>
+        <div class="item"><span class="swatch" style="background:${getComputedStyle(document.documentElement).getPropertyValue('--cM')||'#30cc66'}"></span> Mittag</div>
+        <div class="item"><span class="swatch" style="background:${getComputedStyle(document.documentElement).getPropertyValue('--cA')||'#ffb53a'}"></span> Abend</div>
+        <div class="item"><span class="swatch" style="background:${getComputedStyle(document.documentElement).getPropertyValue('--cS')||'#ff5252'}"></span> Schlafen</div>
+        <div class="item"><span class="swatch" style="background:${getComputedStyle(document.documentElement).getPropertyValue('--cZ')||'#9b6cff'}"></span> Zwischen</div>
+      `;
+      pageEl.appendChild(leg);
+
+      // for each week in chunk create week block (vertical)
+      chunk.forEach(w=>{
+        const weekBlock = document.createElement('div'); weekBlock.className='week-block';
+        const weekTitle = document.createElement('div'); weekTitle.className='week-title';
+        // week label using first/last day of that week
+        const start = w.days[0].date; const end = w.days[w.days.length-1].date;
+        weekTitle.textContent = `KW ${w.week} — ${start} bis ${end}`;
+        weekBlock.appendChild(weekTitle);
+
+        // canvas (draw)
+        const canvas = drawWeekCanvas(w, {width:720, height:240, barWidth:8});
+        weekBlock.appendChild(canvas);
+
+        // week average (F/M/A/S)
+        const vals = [];
+        w.days.forEach(d=> { vals.push(...d.F, ...d.M, ...d.A, ...d.S); });
+        const weekAvg = vals.length ? Math.round(vals.reduce((a,b)=>a+b,0)/vals.length) : null;
+        const avgBox = document.createElement('div'); avgBox.className='avg-box';
+        avgBox.textContent = `Wochendurchschnitt: ${weekAvg!==null? weekAvg + ' mg/dL' : 'n/a'}`;
+        weekBlock.appendChild(avgBox);
+
+        pageEl.appendChild(weekBlock);
+      });
+
+      pages.push({monthKey, pageEl, firstDate: monthDays[0].date, lastDate: monthDays[monthDays.length-1].date});
+    }
+  }
+  // determine global start/end dates for filename
+  const allDates = [].concat(...Object.values(groupByMonth(parseText(text))).map(m=>m.map(d=>d.date))).flat();
+  const start = allDates.length? allDates[0] : null;
+  const end = allDates.length? allDates[allDates.length-1] : null;
+
+  return {pages, start, end};
+}
+
+/* ---------- UI actions ---------- */
+const btnGenerate = document.getElementById('btnGenerate');
+const btnExport = document.getElementById('btnExport');
+const btnClear = document.getElementById('btnClear');
+const pagesContainer = document.getElementById('pagesContainer');
+
+btnGenerate.addEventListener('click', ()=>{
+  const txt = document.getElementById('inputText').value;
+  pagesContainer.innerHTML = '';
+  btnExport.disabled = true;
+  if(!txt.trim()){ alert('Bitte Text einfügen.'); return; }
+
+  const report = buildReportFromText(txt);
+  if(!report.pages.length){ alert('Keine Messdaten gefunden. Bitte Text prüfen.'); return; }
+
+  report.pages.forEach(p=> pagesContainer.appendChild(p.pageEl));
+  btnExport.disabled = false;
+  // store report for export
+  pagesContainer._report = report;
+});
+
+btnClear.addEventListener('click', ()=>{
+  document.getElementById('inputText').value = '';
+  pagesContainer.innerHTML = '';
+  pagesContainer._report = null;
+  btnExport.disabled = true;
+});
+
+/* ---------- PDF export (html2canvas + jsPDF) ---------- */
+btnExport.addEventListener('click', async ()=>{
+  const report = pagesContainer._report;
+  if(!report || !report.pages.length) return alert('Bitte zuerst Diagramme erzeugen.');
+
+  // build pdf with one "month-page" per pdf page; use jsPDF A4 portrait (in px)
+  const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF({ unit:'px', format:'a4', compress:true });
+  const margin = 10;
+  let first = true;
+
+  for(let idx=0; idx<report.pages.length; idx++){
+    const pageObj = report.pages[idx];
+    const el = pageObj.pageEl;
+
+    // render element to canvas via html2canvas
+    const canvas = await html2canvas(el, {scale: 2, backgroundColor: '#ffffff'});
+    const imgData = canvas.toDataURL('image/png');
+
+    const imgProps = pdf.getImageProperties(imgData);
+    const pdfW = pdf.internal.pageSize.getWidth() - 2*margin;
+    const pdfH = (imgProps.height * pdfW) / imgProps.width;
+
+    if(!first) pdf.addPage();
+    pdf.addImage(imgData, 'PNG', margin, margin, pdfW, pdfH);
+    first = false;
+  }
+
+  // filename: Glukose_START_END.pdf
+  const start = report.start || 'start';
+  const end = report.end || 'end';
+  const filename = `Glukose_${start}_bis_${end}.pdf`;
+  pdf.save(filename);
+});
+
+/* ---------- small utility re-used ---------- */
+function parseText(t){ return parseTextInternal(t); } // alias
+function parseTextInternal(text){ return parseTextFunction(text); }
+
+/* Duplicate safe parse function because of scoping in this long file */
+function parseTextFunction(text){
+  // re-use parser defined earlier (parseText)
+  return (function inner(t){ return (function(){ return (function(){return (function(){ return parseTextFallback(t); })(); })(); })(); })(text);
+}
+function parseTextFallback(text){
+  // Simple call to the top-level parseText: avoid scope issues
+  return (function(){ 
+    // copy of parseText implementation (the one near top)
+    const lines = text.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
+    const dateRe = /^\d{1,2}\.\d{1,2}\.\d{4}$/;
+    const entriesByDate = {};
+    let curDate = null;
+    for(let raw of lines){
+      if(dateRe.test(raw)){ curDate = raw; if(!entriesByDate[curDate]) entriesByDate[curDate]=[]; continue; }
+      if(!curDate) continue;
+      const numMatch = raw.match(/(\d{2,3})(?!.*\d)/);
+      const value = numMatch ? parseInt(numMatch[1],10) : null;
+      if(value===null) continue;
+      let type = null;
+      if(/fr(ü|ue)h|früh|frueh/i.test(raw)) type='Frühstück';
+      else if(/mittag/i.test(raw)) type='Mittagessen';
+      else if(/abend/i.test(raw)) type='Abendessen';
+      else if(/schlaf/i.test(raw)) type='Schlafen';
+      else if(/zwischen|messung/i.test(raw)) type='Zwischenmessung';
+      else type='Zwischenmessung';
+      entriesByDate[curDate].push({type, value});
+    }
+    const days = [];
+    for(const dateStr of Object.keys(entriesByDate)){
+      const arr = entriesByDate[dateStr];
+      const day = {date: dateStr, F:[], M:[], A:[], S:[], Z:[]};
+      arr.forEach(it=>{
+        if(it.type==='Frühstück') day.F.push(it.value);
+        else if(it.type==='Mittagessen') day.M.push(it.value);
+        else if(it.type==='Abendessen') day.A.push(it.value);
+        else if(it.type==='Schlafen') day.S.push(it.value);
+        else day.Z.push(it.value);
+      });
+      days.push(day);
+    }
+    days.sort((a,b)=> toDateObj(a.date) - toDateObj(b.date));
+    return days;
+  })();
+}
+
+</script>
 </body>
 </html>
