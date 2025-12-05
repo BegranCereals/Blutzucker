@@ -178,121 +178,120 @@ function groupMonthIntoWeeks(days){
 }
 
 /* ---------- Drawing one week chart on canvas ---------- */
-function drawWeekCanvas(weekObj, opts){
-  // opts: widthCss, heightCss, barWidth
+function drawWeekCanvas(weekObj, function drawWeekCanvas(weekObj, opts){
   const days = weekObj.days;
-  const widthCss = opts.width || 760;
+  const widthCss = opts.width || 720;
   const heightCss = opts.height || 240;
   const scale = window.devicePixelRatio || 2;
+
   const canvas = document.createElement('canvas');
   canvas.className = 'week-canvas';
   canvas.width = Math.round(widthCss * scale);
   canvas.height = Math.round(heightCss * scale);
   canvas.style.width = widthCss + 'px';
   canvas.style.height = heightCss + 'px';
+
   const ctx = canvas.getContext('2d');
   ctx.scale(scale, scale);
 
-  // white background (fixed)
-  ctx.fillStyle = '#ffffff';
+  /* Hintergrund */
+  ctx.fillStyle = "#ffffff";
   ctx.fillRect(0,0,widthCss,heightCss);
 
-  const pad = {left:68,right:20,top:36,bottom:56};
+  const pad = { left:68, right:20, top:36, bottom:56 };
   const innerW = widthCss - pad.left - pad.right;
   const innerH = heightCss - pad.top - pad.bottom;
 
-  // collect all numerical values to determine y scale
-  const vals = [];
+  /* Y-Skala bestimmen */
+  const vals=[];
   days.forEach(d=>{
-    [...d.F, ...d.M, ...d.A, ...d.S, ...d.Z].forEach(v=> vals.push(v));
+    [...d.F,...d.M,...d.A,...d.S,...d.Z].forEach(v=>vals.push(v));
   });
-  const maxVal = vals.length ? Math.max(...vals) : 200;
-  const yMax = Math.ceil(maxVal/10)*10 || 200;
+  const maxVal = vals.length? Math.max(...vals) : 200;
+  const yMax = Math.ceil(maxVal/10)*10;
 
-  // horizontal gridlines (5)
-  ctx.strokeStyle = 'rgba(0,0,0,0.12)';
-  ctx.lineWidth = 1;
-  ctx.font = '12px Arial';
+  /* Gitterlinien */
+  ctx.strokeStyle = "rgba(0,0,0,0.12)";
+  ctx.font = "12px Arial";
   for(let i=0;i<=5;i++){
-    const t = i/5;
+    const t=i/5;
     const y = pad.top + innerH * t;
-    ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(widthCss - pad.right, y); ctx.stroke();
-    const val = Math.round(yMax - yMax * t);
-    ctx.fillStyle = '#000';
-    ctx.fillText(String(val), 10, y+4);
+    ctx.beginPath(); ctx.moveTo(pad.left,y); ctx.lineTo(widthCss-pad.right,y); ctx.stroke();
+    const val = Math.round(yMax - yMax*t);
+    ctx.fillStyle="#000"; ctx.fillText(String(val),10,y+4);
   }
 
-  // draw bars: for each day, stacked group of bars (thin)
-  const n = days.length;
-  const step = innerW / Math.max(n,1);
-  const barWidth = opts.barWidth || 8;
-  const spacing = 6; // between groups/day
-
+  /* Farben */
   const colorMap = {
-    F: getComputedStyle(document.documentElement).getPropertyValue('--cF') || '#00aaff',
-    M: getComputedStyle(document.documentElement).getPropertyValue('--cM') || '#30cc66',
-    A: getComputedStyle(document.documentElement).getPropertyValue('--cA') || '#ffb53a',
-    S: getComputedStyle(document.documentElement).getPropertyValue('--cS') || '#ff5252',
-    Z: getComputedStyle(document.documentElement).getPropertyValue('--cZ') || '#9b6cff'
+    F: getComputedStyle(document.documentElement).getPropertyValue('--cF') || "#00c8ff",
+    M: getComputedStyle(document.documentElement).getPropertyValue('--cM') || "#30cc66",
+    A: getComputedStyle(document.documentElement).getPropertyValue('--cA') || "#ffb53a",
+    S: getComputedStyle(document.documentElement).getPropertyValue('--cS') || "#ff5252",
+    Z: getComputedStyle(document.documentElement).getPropertyValue('--cZ') || "#9b6cff"
   };
 
-  // offsets within group so bars don't overlap
-  const order = ['F','M','A','S','Z'];
-  const groupWidth = order.length * (barWidth + 3);
+  const order = ["F","M","A","S","Z"];
+  const barWidth = opts.barWidth || 8;
 
+  const n = days.length;
+  const step = innerW / Math.max(n,1);
+
+  /* --- Zeichnen der Tage --- */
   for(let i=0;i<n;i++){
     const d = days[i];
     const cx = pad.left + step*(i + 0.5);
-    // starting x for the group
-    let startX = cx - groupWidth/2;
+    let groupX = cx - (order.length*(barWidth+5))/2;
 
-    // draw each type (F,M,A,S,Z) as separate thin bar next to each other;
-    order.forEach(type=>{
-      const arr = (type==='F'?d.F:type==='M'?d.M:type==='A'?d.A:type==='S'?d.S:d.Z);
-      if(arr && arr.length){
-        // if multiple values (e.g., several Zwischenmessungen) draw multiple small bars or avg
-        // we'll draw one bar per measurement within that type, stacked horizontally
-        for(let vi=0; vi<arr.length; vi++){
-          const v = arr[vi];
-          const h = (v / yMax) * innerH;
-          const x = startX + vi*(barWidth+2);
-          const y = pad.top + innerH - h;
-          ctx.fillStyle = colorMap[type];
-          ctx.fillRect(x, y, barWidth, h);
-
-          // small white stroke for separation
-          ctx.strokeStyle = '#ffffff';
-          ctx.lineWidth = 1;
-          ctx.strokeRect(x, y, barWidth, h);
-
-          // value label above
-          ctx.fillStyle = '#000';
-          ctx.font = '11px Arial';
-          ctx.fillText(String(v), x + barWidth/2 - 6, y - 6);
-        }
-      }
-      // move startX for next type by at least barWidth + gap
-      startX += (barWidth + 5) + Math.max(0, (arr?arr.length-1:0)*(barWidth+2));
-    });
-
-    // day average: compute avg of all numbers (except between? include all)
-    const allVals = [...d.F, ...d.M, ...d.A, ...d.S]; // exclude Z from day average? user wanted daily average; include all except Z? We'll include F/M/A/S
-    let dayAvg = null;
-    if(allVals.length) dayAvg = Math.round(allVals.reduce((a,b)=>a+b,0)/allVals.length);
-
-    if(dayAvg!==null){
-      const y = pad.top + innerH - (dayAvg / yMax) * innerH;
-      // draw small black dot with white stroke
-      ctx.beginPath(); ctx.arc(cx, y, 4, 0, Math.PI*2); ctx.fillStyle='#000'; ctx.fill(); ctx.lineWidth=1; ctx.strokeStyle='#fff'; ctx.stroke();
-      ctx.fillStyle='#000'; ctx.font='12px Arial'; ctx.fillText(String(dayAvg), cx+8, y+4);
+    /* 1) Tagesdurchschnitt: als Text über dem Tag */
+    const avgVals = [...d.F,...d.M,...d.A,...d.S];
+    if(avgVals.length){
+      const dayAvg = Math.round(avgVals.reduce((a,b)=>a+b,0)/avgVals.length);
+      ctx.fillStyle="#000";
+      ctx.font="12px Arial";
+      ctx.textAlign="center";
+      ctx.fillText(dayAvg, cx, pad.top - 8);  
     }
 
-    // vertical date label rotated - but keep it inside canvas to avoid Safari crash
+    /* 2) Balken zeichnen + vertikale Zahl über jedem Balken */
+    order.forEach(type=>{
+      const arr = type==="F"?d.F:type==="M"?d.M:type==="A"?d.A:type==="S"?d.S:d.Z;
+
+      if(arr.length){
+        for(let vi=0;vi<arr.length;vi++){
+          const v = arr[vi];
+          const h = (v / yMax) * innerH;
+          const x = groupX;
+          const y = pad.top + innerH - h;
+
+          ctx.fillStyle=colorMap[type];
+          ctx.fillRect(x, y, barWidth, h);
+          ctx.strokeStyle="#fff"; ctx.lineWidth=1;
+          ctx.strokeRect(x,y,barWidth,h);
+
+          /* vertikale Zahl über dem Balken */
+          ctx.save();
+          ctx.translate(x + barWidth/2, y - 4);
+          ctx.rotate(-Math.PI/2);
+          ctx.fillStyle="#000";
+          ctx.font="12px Arial";
+          ctx.textAlign="right";
+          ctx.fillText(String(v), 0, 0);
+          ctx.restore();
+
+          groupX += barWidth + 4;
+        }
+      } else {
+        groupX += barWidth + 5;
+      }
+    });
+
+    /* Datum unten */
     ctx.save();
-    ctx.translate(cx - 6, pad.top + innerH + 24);
+    ctx.translate(cx, pad.top + innerH + 30);
     ctx.rotate(-Math.PI/2);
-    ctx.fillStyle = '#000';
-    ctx.font = '12px Arial';
+    ctx.fillStyle="#000";
+    ctx.font="12px Arial";
+    ctx.textAlign="left";
     ctx.fillText(d.date.slice(0,5), 0, 0);
     ctx.restore();
   }
