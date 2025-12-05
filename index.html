@@ -48,7 +48,7 @@
 
     #exportPdfBtn {
         background: #007bff;
-        display: none; /* Initially hidden */
+        display: none;
     }
 
     #exportPdfBtn:hover {
@@ -57,7 +57,7 @@
 
     canvas {
         margin-top: 20px;
-        width: 100%; /* Makes the canvas responsive in the browser view */
+        width: 100%;
         border: 1px solid #ccc;
         background: #ffffff;
     }
@@ -109,11 +109,10 @@
 <script src="cdnjs.cloudflare.com"></script>
 
 <script>
-    // Zugriff auf jsPDF global in diesem Skript
     const { jsPDF } = window.jspdf;
 
     /* ---------------------------------------------------------
-       BEISPIELDATEN (Für schnelles Testen)
+       BEISPIELDATEN
     ------------------------------------------------------------*/
     document.getElementById("input").value = `
 01.12.2025
@@ -147,7 +146,6 @@ Abendessen: 128
 Schlafen: 105
 `;
 
-
     /* ---------------------------------------------------------
        DATEN PARSEN
     ------------------------------------------------------------*/
@@ -166,14 +164,13 @@ Schlafen: 105
         };
 
         for (let line of lines) {
-            // Prüfen ob die Zeile ein Datum im Format TT.MM.JJJJ ist
             if (line.match(/^\d{1,2}\.\d{1,2}\.\d{4}$/)) {
                 currentDate = line;
                 continue;
             }
 
-            // Prüfen ob die Zeile einen Wert enthält
-            const m = line.match(/(Frühstück|Mittagessen|Abendessen|Schlafen|Zwischenmessung).*?(\d+)\s*$/);
+            // Korrigierter Regex, um den Wert korrekt zu extrahieren
+            const m = line.match(/(Frühstück|Mittagessen|Abendessen|Schlafen|Zwischenmessung):\s*(\d+)\s*$/);
             if (m && currentDate) {
                 entries.push({
                     date: currentDate,
@@ -199,7 +196,6 @@ Schlafen: 105
     function getWeekNumber(date) {
         const d = new Date(date.getTime());
         d.setHours(0,0,0,0);
-        // ISO week date calculation (Monday as first day of week)
         d.setDate(d.getDate() + 3 - (d.getDay() + 6) % 7);
         const week1 = new Date(d.getFullYear(), 0, 4);
         return 1 + Math.round(((d.getTime() - week1.getTime()) / 86400000 - 3 + (week1.getDay() + 6) % 7) / 7);
@@ -207,17 +203,14 @@ Schlafen: 105
 
     function groupByWeek(entries) {
         const map = {};
-
         for (let e of entries) {
             const iso = dateToISO(e.date);
             const year = iso.getFullYear();
             const week = getWeekNumber(iso);
             const key = `${year}-KW${week}`;
-
             if (!map[key]) map[key] = [];
             map[key].push(e);
         }
-
         return map;
     }
 
@@ -229,20 +222,20 @@ Schlafen: 105
         const ctx = canvas.getContext("2d");
         const W = canvas.width;
         const H = canvas.height;
-
         ctx.fillStyle = "#fff";
         ctx.fillRect(0,0,W,H);
 
-        const uniqueDays = [...new Set(weekData.map(e => e.date))].sort((a, b) => dateToISO(a) - dateToISO(b));
+        // Sortiereinträge innerhalb der Woche nach Datum, um Tage in der richtigen Reihenfolge zu bekommen
+        weekData.sort((a, b) => dateToISO(a.date) - dateToISO(b.date));
+        
+        const uniqueDays = [...new Set(weekData.map(e => e.date))];
 
-        // Maxwert für Skalierung (min 180 für gute Skala)
         const maxValue = Math.max(...weekData.map(e => e.value), 180); 
         const maxBarHeight = H - 140;
-
         const startX = 80;
-        let x = startX;
-        const barWidth = 30; // Etwas breiter für bessere Sichtbarkeit
-        const dayGap = 20; // Abstand zwischen den Tagen
+        let currentX = startX;
+        const individualBarWidth = 40; // Breite eines einzelnen Messwert-Balkens
+        const dayGap = 60; // Großer Abstand zwischen den Tagen
 
         // Orientierungslinien und Y-Achse Beschriftung
         ctx.strokeStyle = "rgba(0,0,0,0.15)";
@@ -255,9 +248,8 @@ Schlafen: 105
             ctx.moveTo(60, y);
             ctx.lineTo(W - 40, y);
             ctx.stroke();
-            
-            const value = maxValue * (1 - i / (numLines - 1));
-            ctx.fillText(Math.round(value), 10, y + 5);
+            const value = Math.round(maxValue * (1 - i / (numLines - 1)));
+            ctx.fillText(value, 10, y + 5);
         }
 
         // Titel
@@ -269,31 +261,34 @@ Schlafen: 105
 
         for (let day of uniqueDays) {
             const dayEntries = weekData.filter(e => e.date === day);
-            
+            const dayWidth = dayEntries.length * individualBarWidth;
+
             // Datum unter Balken zentriert
             ctx.save();
-            ctx.translate(x + (barWidth * dayEntries.length / 2), H - 55);
+            ctx.translate(currentX + dayWidth / 2, H - 55);
             ctx.rotate(-Math.PI/2);
             ctx.fillStyle = "#000";
             ctx.fillText(day, 0, 0);
             ctx.restore();
 
+            let xOffset = 0;
             for (let e of dayEntries) {
                 const h = (e.value / maxValue) * maxBarHeight;
                 const yPos = (H - 80) - h;
 
                 // Balken zeichnen
                 ctx.fillStyle = e.color;
-                ctx.fillRect(x, yPos, barWidth, h);
+                ctx.fillRect(currentX + xOffset, yPos, individualBarWidth, h);
 
                 // Wert über Balken schreiben
                 ctx.fillStyle = "#000";
-                ctx.fillText(e.value, x, yPos - 5);
+                ctx.font = "16px Arial";
+                ctx.fillText(e.value, currentX + xOffset + 5, yPos - 5);
 
-                x += barWidth;
+                xOffset += individualBarWidth;
             }
             // Abstand zwischen den Tagen
-            x += dayGap;
+            currentX += dayWidth + dayGap;
         }
     }
 
@@ -332,21 +327,14 @@ Schlafen: 105
 
         for (let weekKey of sortedWeeksKeys) {
             const data = weeks[weekKey];
-
-            // Daten innerhalb der Woche nach Datum sortieren
-            const sorted = data.slice().sort((a,b)=>dateToISO(a.date)-dateToISO(b.date));
-            
             const page = document.createElement("div");
             page.className = "page";
-
             const canvas = document.createElement("canvas");
-            // Setzen Sie eine hohe Auflösung für den Export (z.B. 4K Breite)
+            // Hohe Auflösung für den Export
             canvas.width = 3840; 
             canvas.height = 1600;
-
-            drawChart(canvas, sorted, weekKey);
+            drawChart(canvas, data, weekKey);
             page.appendChild(canvas);
-
             output.appendChild(page);
         }
     }
@@ -356,7 +344,6 @@ Schlafen: 105
     ------------------------------------------------------------*/
 
     async function exportToPdf() {
-        // Hide buttons during processing to avoid interference with html2canvas
         document.getElementById("generateBtn").style.display = 'none';
         document.getElementById("exportPdfBtn").style.display = 'none';
         
@@ -365,14 +352,12 @@ Schlafen: 105
 
         for (let i = 0; i < pages.length; i++) {
             const page = pages[i];
-            // Render the whole page div including title and canvas
             const canvas = await html2canvas(page, { scale: 2, useCORS: true, logging: false });
             
             const imgData = canvas.toDataURL('image/png');
-            // A4 dimensions in mm: 210 x 297
             const pdfWidth = pdf.internal.pageSize.getWidth();
             const pdfHeight = pdf.internal.pageSize.getHeight();
-            const imgWidth = pdfWidth - 20; // 10mm margin on each side
+            const imgWidth = pdfWidth - 20;
             const imgHeight = (canvas.height * imgWidth) / canvas.width;
 
             if (i > 0) {
@@ -384,7 +369,6 @@ Schlafen: 105
 
         pdf.save("Glukose-Diagramme.pdf");
 
-        // Show buttons again
         document.getElementById("generateBtn").style.display = 'block';
         document.getElementById("exportPdfBtn").style.display = 'block';
     }
